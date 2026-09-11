@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { storage } from './server/storage';
+import { verifySupabaseConnection } from './server/supabase';
 import { generateFigureSequence } from './src/generator/figureSequenceEngine';
 import { Attempt, AttemptAnswer, Question, UserTier } from './src/types';
 
@@ -17,6 +18,19 @@ async function startServer() {
       console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     }
     next();
+  });
+
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  app.get('/api/db/status', async (req, res) => {
+    try {
+      const status = await verifySupabaseConnection();
+      res.json(status);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // ==========================================

@@ -4,8 +4,17 @@ import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
+  const rawUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const match = rawUrl.match(/https:\/\/[a-z0-9-]+\.supabase\.co/i);
+  const cleanUrl = match ? match[0] : rawUrl.trim();
+  const anonKey = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+
   return {
     plugins: [react(), tailwindcss()],
+    define: {
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(cleanUrl),
+      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(anonKey),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

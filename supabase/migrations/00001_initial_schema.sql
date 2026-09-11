@@ -390,6 +390,9 @@ ALTER TABLE user_topic_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE study_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE navigation_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE practice_test_questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE question_generators ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 
 -- Public read for published pages, navigation, active tenants
@@ -400,6 +403,11 @@ CREATE POLICY "Allow public read of exams" ON exams FOR SELECT USING (status = '
 CREATE POLICY "Allow public read of sections" ON exam_sections FOR SELECT USING (status = 'ACTIVE');
 CREATE POLICY "Allow public read of topics" ON topics FOR SELECT USING (true);
 CREATE POLICY "Allow public read of published practice tests" ON practice_tests FOR SELECT USING (is_published = true);
+CREATE POLICY "Allow public read of practice test questions" ON practice_test_questions FOR SELECT USING (true);
+CREATE POLICY "Allow public read of published questions" ON questions FOR SELECT USING (status = 'PUBLISHED');
+CREATE POLICY "Allow public read of question options" ON question_options FOR SELECT USING (true);
+CREATE POLICY "Allow public read of active plans" ON plans FOR SELECT USING (status = 'ACTIVE');
+CREATE POLICY "Allow public read of active generators" ON question_generators FOR SELECT USING (status = 'ACTIVE');
 
 -- Student attempts: students can read/write their own attempts
 CREATE POLICY "Users access their own attempts" ON attempts FOR ALL USING (auth.uid() = user_id);
@@ -408,3 +416,11 @@ CREATE POLICY "Users access their own attempt answers" ON attempt_answers FOR AL
 );
 CREATE POLICY "Users access their own topic progress" ON user_topic_progress FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users access their own study plans" ON study_plans FOR ALL USING (auth.uid() = user_id);
+
+-- GRANT PERMISSIONS FOR POSTGREST ACCESS
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON attempts TO authenticated;
+GRANT ALL ON attempt_answers TO authenticated;
+GRANT ALL ON user_topic_progress TO authenticated;
+GRANT ALL ON study_plans TO authenticated;
