@@ -7,32 +7,93 @@ import {
   FileQuestion,
   GraduationCap,
   Palette,
+  RefreshCw,
+  ShieldAlert,
+  Sparkles,
   TrendingUp,
   Users,
 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 import { useTenant } from '../../contexts/TenantContext';
 import { adminService, AdminOverviewStats } from '../../services/adminService';
 
 export const AdminOverview: React.FC = () => {
   const { currentTenant } = useTenant();
+  const { role, switchDemoProfile, setLoginModalOpen } = useAuth();
   const [stats, setStats] = useState<AdminOverviewStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchOverview = () => {
+    setLoading(true);
+    setError(null);
     adminService
       .getOverview(currentTenant?.id)
-      .then((data) => setStats(data))
-      .catch((err) => console.error('Error fetching admin overview:', err))
+      .then((data) => {
+        setStats(data);
+        setError(null);
+      })
+      .catch((err: any) => {
+        setError(err.message || 'Failed to load administrator metrics');
+      })
       .finally(() => setLoading(false));
-  }, [currentTenant?.id]);
+  };
 
-  if (loading || !stats) {
+  useEffect(() => {
+    fetchOverview();
+  }, [currentTenant?.id, role]);
+
+  if (loading) {
     return (
-      <div className="py-16 text-center text-slate-400">
+      <div className="py-20 text-center text-slate-400">
         <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-        <p className="text-xs">Loading admin metrics...</p>
+        <p className="text-xs font-medium">Loading authoritative metrics...</p>
       </div>
     );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-lg mx-auto my-12 p-6 bg-slate-950/80 border border-slate-800 rounded-2xl text-center shadow-xl">
+        <div className="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center mx-auto mb-3.5">
+          <ShieldAlert className="w-6 h-6" />
+        </div>
+        <h2 className="text-lg font-bold text-white mb-1.5">Administrative Metric Access</h2>
+        <p className="text-xs text-slate-400 mb-5 leading-relaxed">{error}</p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => {
+              switchDemoProfile('PAID', 'SUPER_ADMIN');
+              fetchOverview();
+            }}
+            className="w-full sm:w-auto px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Enable Demo Admin</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setLoginModalOpen(true)}
+            className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
+          >
+            Sign In with Supabase
+          </button>
+          <button
+            type="button"
+            onClick={fetchOverview}
+            className="w-full sm:w-auto px-3.5 py-2 text-slate-400 hover:text-white text-xs inline-flex items-center justify-center gap-1 cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Retry</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return null;
   }
 
   return (

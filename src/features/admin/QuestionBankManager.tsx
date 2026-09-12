@@ -17,6 +17,7 @@ export const QuestionBankManager: React.FC = () => {
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('');
   const [previewQuestion, setPreviewQuestion] = useState<Question | null>(null);
 
@@ -37,6 +38,7 @@ export const QuestionBankManager: React.FC = () => {
   const loadQuestions = async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await adminService.getQuestions({
         difficulty: selectedDifficulty || undefined,
       });
@@ -45,7 +47,7 @@ export const QuestionBankManager: React.FC = () => {
         setPreviewQuestion(data[0]);
       }
     } catch (err: any) {
-      console.error('Failed to load questions:', err);
+      setError(err.message || 'Failed to load question bank');
     } finally {
       setLoading(false);
     }
@@ -140,6 +142,18 @@ export const QuestionBankManager: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {error && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-xs text-amber-300 flex items-center justify-between">
+          <span>{error}</span>
+          <button
+            onClick={loadQuestions}
+            className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 rounded-lg font-semibold cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Question List */}

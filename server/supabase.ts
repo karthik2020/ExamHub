@@ -7,12 +7,45 @@ export function getSanitizedSupabaseUrl(): string {
   return match ? match[0] : raw.trim();
 }
 
+// Robust sanitization of API keys (extracts JWT if user pasted JS assignment or quotes)
+export function sanitizeApiKey(raw: string): string {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  const jwtMatch = trimmed.match(/eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]+/);
+  if (jwtMatch) {
+    return jwtMatch[0];
+  }
+  const quoteMatch = trimmed.match(/["']([^"']+)["']/);
+  if (quoteMatch) {
+    return quoteMatch[1];
+  }
+  return trimmed;
+}
+
+function pickValidJwt(candidates: (string | undefined)[]): string {
+  for (const c of candidates) {
+    if (!c) continue;
+    const sanitized = sanitizeApiKey(c);
+    if (sanitized.startsWith('eyJ') && sanitized.split('.').length === 3) {
+      return sanitized;
+    }
+  }
+  for (const c of candidates) {
+    if (!c) continue;
+    const sanitized = sanitizeApiKey(c);
+    if (sanitized && !sanitized.includes('KEY')) {
+      return sanitized;
+    }
+  }
+  return sanitizeApiKey(candidates[0] || '');
+}
+
 export function getSupabaseAnonKey(): string {
-  return (process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+  return pickValidJwt([process.env.SUPABASE_ANON_KEY, process.env.SUPABASE_KEY]);
 }
 
 export function getSupabaseServiceKey(): string {
-  return (process.env.SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  return pickValidJwt([process.env.SUPABASE_SERVICE_ROLE_KEY, process.env.SERVICE_KEY]);
 }
 
 // Check role from JWT token
@@ -41,7 +74,48 @@ export function getSupabaseAdminClient(): SupabaseClient | null {
   const url = getSanitizedSupabaseUrl();
   const key = getSupabaseServiceKey();
   if (!url || !key) return null;
+  // If the key is a valid JWT or string, initialize client
   return createClient(url, key);
+}
+
+// User-scoped Supabase client that forwards authenticated student's JWT token
+export function getSupabaseUserClient(token: string): SupabaseClient | null {
+  const url = getSanitizedSupabaseUrl();
+  const key = getSupabaseAnonKey();
+  if (!url || !key || !token) return null;
+  return createClient(url, key, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${token.replace(/^Bearer\s+/i, '')}`,
+      },
+    },
+  });
+}
+
+// Determine best client for a given request:
+// 1. User client if JWT Authorization header is provided
+// 2. Admin client if privileged operations / service role key is available
+// 3. Anon client as standard default
+export function getDbClient(authHeader?: string): SupabaseClient {
+  const token = authHeader?.replace(/^Bearer\s+/i, '').trim();
+  if (token && token.startsWith('ey')) {
+    const userClient = getSupabaseUserClient(token);
+    if (userClient) return userClient;
+  }
+
+  // Check if admin client with valid service role is available
+  const serviceKey = getSupabaseServiceKey();
+  const serviceRole = inspectJwtRole(serviceKey);
+  if (serviceRole === 'service_role') {
+    const adminClient = getSupabaseAdminClient();
+    if (adminClient) return adminClient;
+  }
+
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error('Supabase client is not configured. Please check SUPABASE_URL and SUPABASE_KEY.');
+  }
+  return client;
 }
 
 export interface DatabaseStatus {
@@ -89,7 +163,7 @@ export async function verifySupabaseConnection(): Promise<DatabaseStatus> {
     queryError: null,
   };
 
-  const client = getSupabaseClient();
+  const client = getDbClient();
   if (!client) {
     status.queryError = 'Supabase client could not be initialized: missing URL or Key.';
     return status;

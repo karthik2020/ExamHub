@@ -1,10 +1,17 @@
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { storage } from './server/storage';
-import { verifySupabaseConnection } from './server/supabase';
+import { verifySupabaseConnection, getSupabaseAdminClient } from './server/supabase';
 import { generateFigureSequence } from './src/generator/figureSequenceEngine';
-import { Attempt, AttemptAnswer, Question, UserTier } from './src/types';
+import { tenantService } from './server/services/tenantService';
+import { cmsService } from './server/services/cmsService';
+import { examService } from './server/services/examService';
+import { questionService } from './server/services/questionService';
+import { practiceTestService } from './server/services/practiceTestService';
+import { attemptService } from './server/services/attemptService';
+import { userService } from './server/services/userService';
+import { adminService } from './server/services/adminService';
+import { getAuthenticatedUser, syncUserAndTenant, requireAuth, requireAdmin } from './server/auth';
 
 const PORT = 3000;
 
@@ -34,454 +41,467 @@ async function startServer() {
   });
 
   // ==========================================
+  // AUTHENTICATION & IDENTITY APIS
+  // ==========================================
+  // Get currently authenticated user profile & tenant membership derived from JWT
+  app.get('/api/auth/me', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const { user: authUser, error } = await getAuthenticatedUser(authHeader);
+
+      if (!authUser || error) {
+        return res.json({
+          authenticated: false,
+          user: null,
+          error: error || 'No active session',
+        });
+      }
+
+      const tenantIdOrSlug =
+        (req.query.tenant_id as string) ||
+        (req.headers['x-tenant-id'] as string) ||
+        'dmathub';
+
+      const profile = await syncUserAndTenant(authUser, tenantIdOrSlug);
+
+      res.json({
+        authenticated: true,
+        user: profile,
+        tenant: {
+          id: profile.tenant_id,
+          slug: profile.tenant_slug,
+          student_path: profile.student_path,
+        },
+      });
+    } catch (err: any) {
+      console.error('Error in /api/auth/me:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Register a new user account with Supabase Auth
+  app.post('/api/auth/register', async (req, res) => {
+    try {
+      const { email, password, name, tenant_id } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+      }
+
+      const adminClient = getSupabaseAdminClient();
+      if (!adminClient) {
+        return res.status(500).json({ error: 'Supabase server administrative client not configured' });
+      }
+
+      const sanitizedEmail = email.trim().toLowerCase();
+      const displayName = name ? name.trim() : sanitizedEmail.split('@')[0];
+
+      // Create pre-confirmed user in Supabase Auth so candidate can log in immediately
+      const { data: createData, error: createErr } = await adminClient.auth.admin.createUser({
+        email: sanitizedEmail,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          name: displayName,
+          role: 'STUDENT',
+          tier: 'REGISTERED',
+        },
+      });
+
+      if (createErr) {
+        if (createErr.message.toLowerCase().includes('already registered') || createErr.message.toLowerCase().includes('duplicate')) {
+          return res.status(409).json({ error: 'An account with this email address already exists. Please log in.' });
+        }
+        return res.status(400).json({ error: createErr.message });
+      }
+
+      const newUser = createData.user;
+      if (!newUser) {
+        return res.status(500).json({ error: 'Failed to create auth user' });
+      }
+
+      // Sync into public.users and public.tenant_users
+      const profile = await syncUserAndTenant(newUser, tenant_id || 'dmathub');
+
+      res.status(201).json({
+        success: true,
+        message: 'Account registered successfully. You can now sign in.',
+        user: {
+          id: profile.id,
+          email: profile.email,
+          name: profile.name,
+          role: profile.role,
+          tier: profile.tier,
+          tenant_id: profile.tenant_id,
+          student_path: profile.student_path,
+        },
+      });
+    } catch (err: any) {
+      console.error('Error in /api/auth/register:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Password reset request
+  app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ error: 'Email address is required' });
+      }
+
+      const adminClient = getSupabaseAdminClient();
+      if (!adminClient) {
+        return res.status(500).json({ error: 'Supabase admin client not configured' });
+      }
+
+      // Check if user exists first to give helpful feedback
+      const { data: userData } = await adminClient
+        .from('users')
+        .select('id, email')
+        .eq('email', email.trim().toLowerCase())
+        .maybeSingle();
+
+      // We trigger password recovery link via Supabase Auth
+      const { data, error } = await adminClient.auth.resetPasswordForEmail(email.trim().toLowerCase());
+      if (error) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      res.json({
+        success: true,
+        message: 'If an account matches this email, password reset instructions have been generated.',
+        user_exists: Boolean(userData),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ==========================================
   // 1. TENANT MANAGEMENT APIS
   // ==========================================
-  app.get('/api/tenants', (req, res) => {
-    const list = Array.from(storage.tenants.values());
-    res.json(list);
+  app.get('/api/tenants', async (req, res) => {
+    try {
+      const list = await tenantService.getAllTenants(req.headers.authorization);
+      res.json(list);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.get('/api/tenants/:slug', (req, res) => {
-    const { slug } = req.params;
-    const tenant = Array.from(storage.tenants.values()).find((t) => t.slug === slug);
-    if (!tenant) {
-      return res.status(404).json({ error: `Tenant '${slug}' not found.` });
+  app.get('/api/tenants/:slug', async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const tenant = await tenantService.getTenantBySlug(slug, req.headers.authorization);
+      if (!tenant) {
+        return res.status(404).json({ error: `Tenant '${slug}' not found in PostgreSQL.` });
+      }
+      res.json(tenant);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-    res.json(tenant);
   });
 
-  app.put('/api/tenants/:id', (req, res) => {
-    const { id } = req.params;
-    const existing = storage.tenants.get(id);
-    if (!existing) {
-      return res.status(404).json({ error: 'Tenant not found.' });
+  app.put('/api/tenants/:id', requireAdmin as any, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updated = await tenantService.updateTenant(id, req.body, req.headers.authorization);
+      await adminService.logAudit({
+        tenant_id: id,
+        action: 'TENANT_BRANDING_UPDATED',
+        entity_type: 'TENANT',
+        entity_id: id,
+        new_data: updated,
+      }, req.headers.authorization);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-    const updated = { ...existing, ...req.body, updated_at: new Date().toISOString() };
-    storage.tenants.set(id, updated);
-
-    storage.auditLogs.unshift({
-      id: `audit-${Date.now()}`,
-      tenant_id: id,
-      action: 'TENANT_BRANDING_UPDATED',
-      entity_type: 'TENANT',
-      entity_id: id,
-      old_data: existing,
-      new_data: updated,
-      created_at: new Date().toISOString(),
-    });
-
-    res.json(updated);
   });
 
   // ==========================================
   // 2. CMS & NAVIGATION APIS
   // ==========================================
-  app.get('/api/cms/pages', (req, res) => {
-    const { tenant_id } = req.query;
-    const pages = Array.from(storage.pages.values()).filter(
-      (p) => !tenant_id || p.tenant_id === tenant_id
-    );
-    res.json(pages);
+  app.get('/api/cms/pages', async (req, res) => {
+    try {
+      const tenantId = req.query.tenant_id as string | undefined;
+      const pages = await cmsService.getPages(tenantId, req.headers.authorization);
+      res.json(pages);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.get('/api/cms/pages/:slug', (req, res) => {
-    const { slug } = req.params;
-    const page = storage.pages.get(slug);
-    if (!page) {
-      return res.status(404).json({ error: `Page '${slug}' not found.` });
+  app.get('/api/cms/pages/:slug', async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const tenantId = req.query.tenant_id as string | undefined;
+      const page = await cmsService.getPageBySlug(slug, tenantId, req.headers.authorization);
+      if (!page) {
+        return res.status(404).json({ error: `Page '${slug}' not found in PostgreSQL.` });
+      }
+      res.json(page);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-    res.json(page);
   });
 
-  app.put('/api/cms/pages/:slug', (req, res) => {
-    const { slug } = req.params;
-    const existing = storage.pages.get(slug);
-    if (!existing) {
-      return res.status(404).json({ error: 'Page not found' });
+  app.put('/api/cms/pages/:slug', async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const updated = await cmsService.updatePage(slug, req.body, req.headers.authorization);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-    const updated = { ...existing, ...req.body };
-    storage.pages.set(slug, updated);
-    res.json(updated);
   });
 
-  app.get('/api/cms/navigation', (req, res) => {
-    const { tenant_id, location } = req.query;
-    let items = storage.navigation;
-    if (tenant_id) {
-      items = items.filter((n) => n.tenant_id === tenant_id);
+  app.get('/api/cms/navigation', async (req, res) => {
+    try {
+      const tenantId = req.query.tenant_id as string | undefined;
+      const location = req.query.location as string | undefined;
+      const items = await cmsService.getNavigation(tenantId, location, req.headers.authorization);
+      res.json(items);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-    if (location) {
-      items = items.filter((n) => n.location === location);
-    }
-    res.json(items);
   });
 
   // ==========================================
   // 3. EXAMS, SECTIONS, & TOPICS APIS
   // ==========================================
-  app.get('/api/exams', (req, res) => {
-    const { tenant_id } = req.query;
-    const exams = Array.from(storage.exams.values()).filter(
-      (e) => !tenant_id || e.tenant_id === tenant_id
-    );
-    res.json(exams);
+  app.get('/api/exams', async (req, res) => {
+    try {
+      const tenantId = req.query.tenant_id as string | undefined;
+      const exams = await examService.getExams(tenantId, req.headers.authorization);
+      res.json(exams);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.get('/api/exams/:id', (req, res) => {
-    const exam = storage.exams.get(req.params.id);
-    if (!exam) return res.status(404).json({ error: 'Exam not found' });
-    res.json(exam);
+  app.get('/api/exams/:id', async (req, res) => {
+    try {
+      const exam = await examService.getExamById(req.params.id, req.headers.authorization);
+      if (!exam) return res.status(404).json({ error: 'Exam not found in PostgreSQL' });
+      res.json(exam);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.post('/api/exams', (req, res) => {
-    const newExam = {
-      id: `e-${Date.now()}`,
-      ...req.body,
-    };
-    storage.exams.set(newExam.id, newExam);
-    res.status(201).json(newExam);
+  app.post('/api/exams', async (req, res) => {
+    try {
+      const newExam = await examService.createExam(req.body, req.headers.authorization);
+      res.status(201).json(newExam);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.get('/api/exams/:id/sections', (req, res) => {
-    const { id } = req.params;
-    const sections = Array.from(storage.sections.values()).filter((s) => s.exam_id === id);
-    res.json(sections);
+  app.get('/api/exams/:id/sections', async (req, res) => {
+    try {
+      const sections = await examService.getSectionsByExamId(req.params.id, req.headers.authorization);
+      res.json(sections);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.get('/api/topics', (req, res) => {
-    const { section_id } = req.query;
-    const topics = Array.from(storage.topics.values()).filter(
-      (t) => !section_id || t.section_id === section_id
-    );
-    res.json(topics);
+  app.get('/api/topics', async (req, res) => {
+    try {
+      const sectionId = req.query.section_id as string | undefined;
+      const topics = await examService.getTopics(sectionId, req.headers.authorization);
+      res.json(topics);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // ==========================================
   // 4. PRACTICE TESTS APIS
   // ==========================================
-  app.get('/api/practice-tests', (req, res) => {
-    const { tenant_id, exam_id } = req.query;
-    let tests = Array.from(storage.practiceTests.values()).filter((t) => t.is_published);
-    if (tenant_id) tests = tests.filter((t) => t.tenant_id === tenant_id);
-    if (exam_id) tests = tests.filter((t) => t.exam_id === exam_id);
-    res.json(tests);
+  app.get('/api/practice-tests', async (req, res) => {
+    try {
+      const tenantId = req.query.tenant_id as string | undefined;
+      const examId = req.query.exam_id as string | undefined;
+      const sectionId = req.query.section_id as string | undefined;
+      const tests = await practiceTestService.getPracticeTests(
+        { tenant_id: tenantId, exam_id: examId, section_id: sectionId },
+        req.headers.authorization
+      );
+      res.json(tests);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.get('/api/practice-tests/:id', (req, res) => {
-    const test = storage.practiceTests.get(req.params.id);
-    if (!test) return res.status(404).json({ error: 'Practice test not found' });
-    res.json(test);
+  app.get('/api/practice-tests/:id', async (req, res) => {
+    try {
+      const test = await practiceTestService.getPracticeTestById(req.params.id, req.headers.authorization);
+      if (!test) return res.status(404).json({ error: 'Practice test not found in PostgreSQL' });
+      res.json(test);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // ==========================================
   // 5. TEST ATTEMPTS & AUTHORITATIVE SCORING
   // ==========================================
-  // Start a new test attempt (Enforces Access Tier + Strips correct answers from student payload)
-  app.post('/api/practice-tests/start', (req, res) => {
-    const { practice_test_id, user_id, tenant_id, difficulty, question_count } = req.body;
-    const test = storage.practiceTests.get(practice_test_id);
+  // Start a new test attempt (Persists to PostgreSQL attempts & attempt_answers + Strips solutions)
+  app.post('/api/practice-tests/start', async (req, res) => {
+    try {
+      let params = { ...req.body };
+      const authHeader = req.headers.authorization;
+      const { user: authUser } = await getAuthenticatedUser(authHeader);
 
-    if (!test) {
-      return res.status(404).json({ error: 'Practice test not found' });
+      if (authUser) {
+        // Derive user_id from verified JWT session - never trust unauthenticated client user_id
+        params.user_id = authUser.id;
+        const profile = await syncUserAndTenant(authUser, params.tenant_id);
+        params.tenant_id = profile.tenant_id;
+        params.user_tier = profile.tier;
+      }
+
+      const response = await attemptService.startAttempt(params, authHeader);
+      res.json(response);
+    } catch (err: any) {
+      console.error('Error starting attempt:', err.message);
+      res.status(500).json({ error: err.message });
     }
-
-    const user = storage.users.get(user_id) || {
-      id: user_id || 'u-guest',
-      email: 'guest@dmathub.com',
-      name: 'Guest Candidate',
-      role: 'STUDENT',
-      tier: 'GUEST' as UserTier,
-      status: 'ACTIVE' as const,
-    };
-
-    let selectedQuestions: Question[] = [];
-
-    if (test.question_selection_mode === 'GENERATED') {
-      // Pro/Paid user procedural generation
-      const count = Math.min(question_count || 10, 20);
-      const diff = difficulty || test.difficulty === 'ALL' ? 'MEDIUM' : (test.difficulty as any);
-      for (let i = 0; i < count; i++) {
-        const seed = `gen-session-${Date.now()}-${i}`;
-        const { question } = generateFigureSequence(
-          seed,
-          diff,
-          test.exam_id,
-          test.section_id || 's0000000-0000-0000-0000-000000000001',
-          tenant_id
-        );
-        selectedQuestions.push(question);
-      }
-    } else {
-      // Fixed pool selection with Access Tier Enforcement:
-      // GUEST: 10 fixed questions (pool_access === 'GUEST')
-      // REGISTERED: 20 fixed questions ('GUEST' + 'REGISTERED')
-      // PAID: All
-      const allQs = Array.from(storage.questions.values()).filter(
-        (q) => q.status === 'PUBLISHED' && (!test.section_id || q.section_id === test.section_id)
-      );
-
-      let eligible = allQs;
-      if (user.tier === 'GUEST') {
-        eligible = allQs.filter((q) => q.pool_access === 'GUEST');
-      } else if (user.tier === 'REGISTERED') {
-        eligible = allQs.filter((q) => q.pool_access === 'GUEST' || q.pool_access === 'REGISTERED');
-      }
-
-      // Filter by difficulty if specified and not 'ALL'
-      if (difficulty && difficulty !== 'ALL') {
-        eligible = eligible.filter((q) => q.difficulty === difficulty);
-      }
-
-      const count = test.question_count || 10;
-      selectedQuestions = eligible.slice(0, count);
-
-      // If requested difficulty yielded fewer than needed, fill with available
-      if (selectedQuestions.length === 0) {
-        selectedQuestions = eligible.slice(0, count);
-      }
-    }
-
-    const timeLimitSeconds = test.time_limit_minutes * 60;
-    const attemptId = `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-
-    // Store authoritative attempt on server
-    const attempt: Attempt = {
-      id: attemptId,
-      tenant_id: tenant_id || test.tenant_id,
-      user_id: user.id,
-      practice_test_id: test.id,
-      practice_test_name: test.name,
-      started_at: new Date().toISOString(),
-      time_limit_seconds: timeLimitSeconds,
-      time_spent_seconds: 0,
-      status: 'IN_PROGRESS',
-      score: 0,
-      max_score: selectedQuestions.length,
-      percentage: 0,
-      correct_count: 0,
-      incorrect_count: 0,
-      skipped_count: selectedQuestions.length,
-      answers: {},
-      questions: selectedQuestions, // Server keeps full questions with correct answers
-    };
-
-    storage.attempts.set(attemptId, attempt);
-
-    // CRITICAL SECURITY: Strip correct_answer, explanation, and option is_correct before returning to client!
-    const sanitizedQuestions = selectedQuestions.map((q) => ({
-      ...q,
-      correct_answer: undefined,
-      explanation: undefined,
-      solution: undefined,
-      options: q.options.map((opt) => ({
-        ...opt,
-        is_correct: undefined,
-      })),
-    }));
-
-    res.json({
-      attempt_id: attempt.id,
-      started_at: attempt.started_at,
-      time_limit_seconds: attempt.time_limit_seconds,
-      test_type: test.test_type,
-      test_name: test.name,
-      questions: sanitizedQuestions,
-      total_questions: sanitizedQuestions.length,
-    });
   });
 
   // Retrieve an existing attempt (e.g. on page refresh to restore session!)
-  app.get('/api/attempts/:id', (req, res) => {
-    const attempt = storage.attempts.get(req.params.id);
-    if (!attempt) {
-      return res.status(404).json({ error: 'Attempt not found' });
-    }
+  app.get('/api/attempts/:id', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const attempt = await attemptService.getAttemptById(req.params.id, authHeader);
+      if (!attempt) {
+        return res.status(404).json({ error: 'Attempt not found in PostgreSQL' });
+      }
 
-    // If attempt is still IN_PROGRESS, do NOT reveal remaining correct answers
-    if (attempt.status === 'IN_PROGRESS') {
-      const sanitizedQuestions = attempt.questions?.map((q) => {
-        // If question was already checked/answered, we can return its grading
-        const recordedAnswer = attempt.answers[q.id];
-        if (recordedAnswer && recordedAnswer.is_correct !== undefined) {
-          return q; // student already checked this question
+      const { user: authUser } = await getAuthenticatedUser(authHeader);
+      if (authUser) {
+        const profile = await syncUserAndTenant(authUser);
+        const isOwner = attempt.user_id === authUser.id;
+        const isAdmin = profile.role === 'SUPER_ADMIN' || profile.role === 'TENANT_ADMIN';
+        if (!isOwner && !isAdmin) {
+          return res.status(403).json({ error: 'Forbidden: You do not have permission to view another student\'s attempt.' });
         }
-        return {
-          ...q,
-          correct_answer: undefined,
-          explanation: undefined,
-          solution: undefined,
-          options: q.options.map((opt) => ({ ...opt, is_correct: undefined })),
-        };
-      });
+      }
 
-      return res.json({
-        ...attempt,
-        questions: sanitizedQuestions,
-      });
+      res.json(attempt);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-
-    // If submitted, return full attempt with solutions
-    res.json(attempt);
   });
 
   // Practice Mode: Check single answer immediately with server-side validation
-  app.post('/api/attempts/:id/check-answer', (req, res) => {
-    const { id } = req.params;
-    const { question_id, selected_option_key, time_spent_seconds } = req.body;
+  app.post('/api/attempts/:id/check-answer', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { question_id, selected_option_key, time_spent_seconds } = req.body;
+      const authHeader = req.headers.authorization;
 
-    const attempt = storage.attempts.get(id);
-    if (!attempt) return res.status(404).json({ error: 'Attempt not found' });
+      const { user: authUser } = await getAuthenticatedUser(authHeader);
+      if (authUser) {
+        const attempt = await attemptService.getAttemptById(id, authHeader);
+        if (attempt && attempt.user_id !== authUser.id) {
+          return res.status(403).json({ error: 'Forbidden: Cannot submit answers for another student\'s attempt.' });
+        }
+      }
 
-    const question = attempt.questions?.find((q) => q.id === question_id);
-    if (!question) return res.status(404).json({ error: 'Question not found in this attempt' });
-
-    const isCorrect = question.correct_answer === selected_option_key;
-
-    const answerRecord: AttemptAnswer = {
-      attempt_id: id,
-      question_id,
-      selected_answer: selected_option_key,
-      is_correct: isCorrect,
-      answered_at: new Date().toISOString(),
-      time_spent_seconds: time_spent_seconds || 0,
-      marks_awarded: isCorrect ? 1 : 0,
-      explanation: question.explanation,
-      solution: question.solution,
-      correct_answer: question.correct_answer,
-    };
-
-    attempt.answers[question_id] = answerRecord;
-
-    // Recalculate intermediate tally
-    let correct = 0;
-    let incorrect = 0;
-    Object.values(attempt.answers).forEach((ans) => {
-      if (ans.is_correct === true) correct++;
-      else if (ans.is_correct === false) incorrect++;
-    });
-
-    attempt.correct_count = correct;
-    attempt.incorrect_count = incorrect;
-    attempt.score = correct;
-    attempt.skipped_count = (attempt.questions?.length || 0) - (correct + incorrect);
-
-    res.json({
-      is_correct: isCorrect,
-      correct_answer: question.correct_answer,
-      explanation: question.explanation,
-      solution: question.solution,
-      attempt_stats: {
-        correct: attempt.correct_count,
-        incorrect: attempt.incorrect_count,
-        score: attempt.score,
-      },
-    });
+      const result = await attemptService.checkAnswer(
+        {
+          attempt_id: id,
+          question_id,
+          selected_option_key,
+          time_spent_seconds,
+        },
+        authHeader
+      );
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Mock Mode: Save answer without revealing solution
-  app.post('/api/attempts/:id/save-answer', (req, res) => {
-    const { id } = req.params;
-    const { question_id, selected_option_key, time_spent_seconds } = req.body;
+  app.post('/api/attempts/:id/save-answer', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { question_id, selected_option_key, time_spent_seconds } = req.body;
+      const authHeader = req.headers.authorization;
 
-    const attempt = storage.attempts.get(id);
-    if (!attempt) return res.status(404).json({ error: 'Attempt not found' });
+      const { user: authUser } = await getAuthenticatedUser(authHeader);
+      if (authUser) {
+        const attempt = await attemptService.getAttemptById(id, authHeader);
+        if (attempt && attempt.user_id !== authUser.id) {
+          return res.status(403).json({ error: 'Forbidden: Cannot save answers for another student\'s attempt.' });
+        }
+      }
 
-    attempt.answers[question_id] = {
-      attempt_id: id,
-      question_id,
-      selected_answer: selected_option_key,
-      answered_at: new Date().toISOString(),
-      time_spent_seconds: time_spent_seconds || 0,
-      marks_awarded: 0, // Calculated upon final submit
-    };
-
-    res.json({ success: true });
+      const result = await attemptService.saveAnswer(
+        {
+          attempt_id: id,
+          question_id,
+          selected_option_key,
+          time_spent_seconds,
+        },
+        authHeader
+      );
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Final Submit & Authoritative Server-Side Grading
-  app.post('/api/attempts/:id/submit', (req, res) => {
-    const { id } = req.params;
-    const attempt = storage.attempts.get(id);
-    if (!attempt) return res.status(404).json({ error: 'Attempt not found' });
+  app.post('/api/attempts/:id/submit', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const authHeader = req.headers.authorization;
 
-    const submitTime = new Date();
-    const startTime = new Date(attempt.started_at);
-    const elapsedSeconds = Math.floor((submitTime.getTime() - startTime.getTime()) / 1000);
-
-    let correctCount = 0;
-    let incorrectCount = 0;
-    let skippedCount = 0;
-    let totalScore = 0;
-
-    attempt.questions?.forEach((q) => {
-      const recorded = attempt.answers[q.id];
-      if (!recorded || !recorded.selected_answer) {
-        skippedCount++;
-        attempt.answers[q.id] = {
-          attempt_id: id,
-          question_id: q.id,
-          selected_answer: undefined,
-          is_correct: false,
-          time_spent_seconds: 0,
-          marks_awarded: 0,
-          correct_answer: q.correct_answer,
-          explanation: q.explanation,
-          solution: q.solution,
-        };
-      } else {
-        const isCorrect = recorded.selected_answer === q.correct_answer;
-        if (isCorrect) {
-          correctCount++;
-          totalScore += 1;
-        } else {
-          incorrectCount++;
+      const { user: authUser } = await getAuthenticatedUser(authHeader);
+      if (authUser) {
+        const attempt = await attemptService.getAttemptById(id, authHeader);
+        if (attempt && attempt.user_id !== authUser.id) {
+          return res.status(403).json({ error: 'Forbidden: Cannot submit another student\'s attempt.' });
         }
-        attempt.answers[q.id].is_correct = isCorrect;
-        attempt.answers[q.id].marks_awarded = isCorrect ? 1 : 0;
-        attempt.answers[q.id].correct_answer = q.correct_answer;
-        attempt.answers[q.id].explanation = q.explanation;
-        attempt.answers[q.id].solution = q.solution;
       }
-    });
 
-    const maxScore = attempt.questions?.length || 1;
-    const percentage = Number(((totalScore / maxScore) * 100).toFixed(1));
-
-    attempt.submitted_at = submitTime.toISOString();
-    attempt.time_spent_seconds = elapsedSeconds;
-    attempt.status = 'SUBMITTED';
-    attempt.score = totalScore;
-    attempt.max_score = maxScore;
-    attempt.percentage = percentage;
-    attempt.correct_count = correctCount;
-    attempt.incorrect_count = incorrectCount;
-    attempt.skipped_count = skippedCount;
-
-    // Log to audit trail
-    storage.auditLogs.unshift({
-      id: `audit-${Date.now()}`,
-      tenant_id: attempt.tenant_id,
-      user_id: attempt.user_id,
-      action: 'EXAM_ATTEMPT_SUBMITTED',
-      entity_type: 'ATTEMPT',
-      entity_id: attempt.id,
-      new_data: {
-        score: totalScore,
-        percentage,
-        time_spent_seconds: elapsedSeconds,
-      },
-      created_at: submitTime.toISOString(),
-    });
-
-    res.json(attempt);
+      const gradedAttempt = await attemptService.submitAttempt(id, authHeader);
+      res.json(gradedAttempt);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.get('/api/attempts/user/:userId', (req, res) => {
-    const { userId } = req.params;
-    const history = Array.from(storage.attempts.values())
-      .filter((a) => a.user_id === userId && a.status === 'SUBMITTED')
-      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
-    res.json(history);
+  app.get('/api/attempts/user/:userId', async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const authHeader = req.headers.authorization;
+
+      const { user: authUser } = await getAuthenticatedUser(authHeader);
+      if (authUser && authUser.id !== userId) {
+        const profile = await syncUserAndTenant(authUser);
+        const isAdmin = profile.role === 'SUPER_ADMIN' || profile.role === 'TENANT_ADMIN';
+        if (!isAdmin) {
+          return res.status(403).json({ error: 'Forbidden: You cannot view another student\'s attempt history.' });
+        }
+      }
+
+      const history = await attemptService.getUserAttempts(userId, authHeader);
+      res.json(history);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // ==========================================
@@ -491,95 +511,112 @@ async function startServer() {
     const seed = (req.query.seed as string) || `seed-${Date.now()}`;
     const diff = (req.query.difficulty as any) || 'MEDIUM';
     const tenantId = (req.query.tenant_id as string) || 'a0000000-0000-0000-0000-000000000001';
-    const examId = 'e0000000-0000-0000-0000-000000000001';
-    const sectionId = 's0000000-0000-0000-0000-000000000001';
+    const examId = (req.query.exam_id as string) || 'e0000000-0000-0000-0000-000000000001';
+    const sectionId = (req.query.section_id as string) || 'b0000000-0000-0000-0000-000000000001';
 
     const result = generateFigureSequence(seed, diff, examId, sectionId, tenantId);
     res.json(result);
   });
 
   // ==========================================
-  // 7. ADMIN PORTAL APIS
+  // 7. ADMIN PORTAL APIS (Protected by server-side role check)
   // ==========================================
-  app.get('/api/admin/overview', (req, res) => {
-    const tenantId = req.query.tenant_id as string;
-    const totalStudents = Array.from(storage.users.values()).filter((u) => u.role === 'STUDENT').length;
-    const totalQuestions = storage.questions.size;
-    const totalTests = storage.practiceTests.size;
-    const totalAttempts = storage.attempts.size;
-
-    const attemptsList = Array.from(storage.attempts.values()).filter((a) => a.status === 'SUBMITTED');
-    const avgScore =
-      attemptsList.length > 0
-        ? (attemptsList.reduce((acc, a) => acc + a.percentage, 0) / attemptsList.length).toFixed(1)
-        : '0';
-
-    res.json({
-      totalStudents,
-      totalQuestions,
-      totalTests,
-      totalAttempts,
-      avgScore,
-      recentAttempts: attemptsList.slice(0, 5),
-    });
+  app.get('/api/admin/overview', requireAdmin as any, async (req, res) => {
+    try {
+      const tenantId = req.query.tenant_id as string | undefined;
+      const overview = await adminService.getOverview(tenantId, req.headers.authorization);
+      res.json(overview);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.get('/api/admin/questions', (req, res) => {
-    const { section_id, difficulty } = req.query;
-    let list = Array.from(storage.questions.values());
-    if (section_id) list = list.filter((q) => q.section_id === section_id);
-    if (difficulty) list = list.filter((q) => q.difficulty === difficulty);
-    res.json(list);
+  app.get('/api/admin/questions', requireAdmin as any, async (req, res) => {
+    try {
+      const { tenant_id, exam_id, section_id, topic_id, difficulty, question_type, status } = req.query;
+      const questions = await questionService.getQuestions(
+        {
+          tenant_id: tenant_id as string | undefined,
+          exam_id: exam_id as string | undefined,
+          section_id: section_id as string | undefined,
+          topic_id: topic_id as string | undefined,
+          difficulty: difficulty as any,
+          question_type: question_type as any,
+          status: status as any,
+        },
+        req.headers.authorization
+      );
+      res.json(questions);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.post('/api/admin/questions', (req, res) => {
-    const newQ = {
-      ...req.body,
-      id: req.body.id || `q-custom-${Date.now()}`,
-      created_at: new Date().toISOString(),
-    };
-    storage.questions.set(newQ.id, newQ);
-
-    storage.auditLogs.unshift({
-      id: `audit-${Date.now()}`,
-      tenant_id: newQ.tenant_id,
-      action: 'QUESTION_CREATED',
-      entity_type: 'QUESTION',
-      entity_id: newQ.id,
-      new_data: { type: newQ.question_type, difficulty: newQ.difficulty },
-      created_at: new Date().toISOString(),
-    });
-
-    res.status(201).json(newQ);
+  app.post('/api/admin/questions', requireAdmin as any, async (req, res) => {
+    try {
+      const newQ = await questionService.createQuestion(req.body, req.headers.authorization);
+      await adminService.logAudit({
+        tenant_id: newQ.tenant_id,
+        action: 'QUESTION_CREATED',
+        entity_type: 'QUESTION',
+        entity_id: newQ.id,
+        new_data: { type: newQ.question_type, difficulty: newQ.difficulty },
+      }, req.headers.authorization);
+      res.status(201).json(newQ);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.delete('/api/admin/questions/:id', (req, res) => {
-    const { id } = req.params;
-    storage.questions.delete(id);
-    res.json({ success: true });
+  app.delete('/api/admin/questions/:id', requireAdmin as any, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await questionService.deleteQuestion(id, req.headers.authorization);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.get('/api/admin/users', (req, res) => {
-    res.json(Array.from(storage.users.values()));
+  app.get('/api/admin/users', requireAdmin as any, async (req, res) => {
+    try {
+      const tenantId = req.query.tenant_id as string | undefined;
+      const users = await userService.getUsers(tenantId, req.headers.authorization);
+      res.json(users);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.put('/api/admin/users/:id/role', (req, res) => {
-    const { id } = req.params;
-    const { role, tier } = req.body;
-    const user = storage.users.get(id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    if (role) user.role = role;
-    if (tier) user.tier = tier;
-    storage.users.set(id, user);
-    res.json(user);
+  app.put('/api/admin/users/:id/role', requireAdmin as any, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { role, tier } = req.body;
+      const user = await userService.updateUserRole(id, role, tier, req.headers.authorization);
+      res.json(user);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.get('/api/admin/audit-logs', (req, res) => {
-    res.json(storage.auditLogs.slice(0, 50));
+  app.get('/api/admin/audit-logs', requireAdmin as any, async (req, res) => {
+    try {
+      const tenantId = req.query.tenant_id as string | undefined;
+      const logs = await adminService.getAuditLogs(tenantId, 50, req.headers.authorization);
+      res.json(logs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.get('/api/plans', (req, res) => {
-    res.json(Array.from(storage.plans.values()));
+  app.get('/api/plans', async (req, res) => {
+    try {
+      const tenantId = req.query.tenant_id as string | undefined;
+      const plans = await tenantService.getPlans(tenantId, req.headers.authorization);
+      res.json(plans);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // ==========================================

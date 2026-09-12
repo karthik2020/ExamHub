@@ -6,12 +6,25 @@ import { AuditLog } from '../../types';
 export const AuditLogsView: React.FC = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchLogs = () => {
+    setLoading(true);
+    setError(null);
     adminService
       .getAuditLogs()
-      .then((data) => setLogs(data))
+      .then((data) => {
+        setLogs(data);
+        setError(null);
+      })
+      .catch((err: any) => {
+        setError(err.message || 'Failed to load audit logs');
+      })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchLogs();
   }, []);
 
   return (
@@ -22,6 +35,18 @@ export const AuditLogsView: React.FC = () => {
           Immutable event trails recording exam starts, submissions, question authoring, and RBAC privilege modifications.
         </p>
       </div>
+
+      {error && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-xs text-amber-300 flex items-center justify-between">
+          <span>{error}</span>
+          <button
+            onClick={fetchLogs}
+            className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 rounded-lg font-semibold cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       <div className="bg-slate-950/60 border border-slate-800 rounded-2xl overflow-hidden">
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">

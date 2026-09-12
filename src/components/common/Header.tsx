@@ -8,6 +8,9 @@ import {
   LayoutDashboard,
   ShieldCheck,
   User as UserIcon,
+  LogIn,
+  LogOut,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTenant } from '../../contexts/TenantContext';
@@ -18,7 +21,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onOpenProfileModal }) => {
   const { currentTenant, availableTenants, switchTenant, studentPortalPath } = useTenant();
-  const { user, role, tier } = useAuth();
+  const { user, role, tier, authMode, isAuthenticated, entitlement, signOut } = useAuth();
   const location = useLocation();
 
   const isStudentArea = location.pathname.startsWith(studentPortalPath);
@@ -54,30 +57,35 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProfileModal }) => {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Active Tier indicator */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-slate-400">Tier:</span>
-              <span
-                className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                  tier === 'PAID'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                    : tier === 'REGISTERED'
-                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-                    : 'bg-slate-700 text-slate-300'
-                }`}
-              >
-                {tier === 'PAID' ? 'Pro Unlimited' : tier === 'REGISTERED' ? 'Registered' : 'Guest (10 Fixed)'}
-              </span>
-            </div>
+            {/* Mode & Tier indicator */}
+            {isAuthenticated ? (
+              <div className="flex items-center gap-1.5">
+                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                  Supabase Auth
+                </span>
+                <span className="text-slate-300 text-xs font-medium">
+                  {user.email}
+                </span>
+                <span className="bg-sky-500/20 text-sky-300 border border-sky-500/40 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                  {entitlement.displayName}
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                  DEMO MODE: {tier}
+                </span>
+              </div>
+            )}
 
-            {/* Quick Profile Switcher */}
+            {/* Profile modal button */}
             <button
               id="btn-switch-profile"
               onClick={onOpenProfileModal}
-              className="text-teal-400 hover:text-teal-300 font-medium underline-offset-2 hover:underline flex items-center gap-1 text-[11px]"
+              className="text-teal-400 hover:text-teal-300 font-medium underline-offset-2 hover:underline flex items-center gap-1 text-[11px] cursor-pointer"
             >
               <UserIcon className="w-3 h-3" />
-              <span>{user.name.split(' ')[0]} ({role === 'SUPER_ADMIN' ? 'Admin' : role})</span>
+              <span>{isAuthenticated ? user.name.split(' ')[0] : 'Auth & Profiles'}</span>
               <ChevronDown className="w-3 h-3" />
             </button>
           </div>
@@ -161,6 +169,25 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProfileModal }) => {
 
         {/* Right CTA / Portal Access */}
         <div className="flex items-center gap-2.5">
+          {/* Sign In / Out button */}
+          {isAuthenticated ? (
+            <button
+              onClick={signOut}
+              className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Log Out</span>
+            </button>
+          ) : (
+            <button
+              onClick={onOpenProfileModal}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-lg border border-teal-200 transition-colors cursor-pointer"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Sign In</span>
+            </button>
+          )}
+
           {/* Link to Student Portal */}
           <Link
             to={studentPortalPath}
@@ -168,7 +195,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProfileModal }) => {
             className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg font-semibold text-sm transition-all shadow-xs ${
               isStudentArea
                 ? 'bg-teal-700 text-white'
-                : 'bg-teal-50 text-teal-800 border border-teal-200 hover:bg-teal-100'
+                : 'bg-teal-700 text-white hover:bg-teal-800'
             }`}
           >
             <GraduationCap className="w-4 h-4" />
@@ -193,3 +220,4 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProfileModal }) => {
     </header>
   );
 };
+
