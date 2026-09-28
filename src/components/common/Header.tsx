@@ -20,7 +20,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onOpenProfileModal }) => {
-  const { currentTenant, availableTenants, switchTenant, studentPortalPath } = useTenant();
+  const { currentTenant, availableTenants, switchTenant, studentPortalPath, activeExam } = useTenant();
   const { user, role, tier, authMode, isAuthenticated, entitlement, signOut } = useAuth();
   const location = useLocation();
 
@@ -112,7 +112,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProfileModal }) => {
               {currentTenant?.name || 'ExamHub Engine'}
             </span>
             <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-500">
-              {currentTenant?.slug === 'dmathub' ? 'Deutsche Master Admission Test' : 'Certification Preparation'}
+              {activeExam?.name || currentTenant?.domain || 'Standardized Examination Engine'}
             </span>
           </div>
         </Link>

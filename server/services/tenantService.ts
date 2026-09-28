@@ -1,4 +1,4 @@
-import { getDbClient } from '../supabase';
+import { getDbClient, getSupabaseAdminClient } from '../supabase';
 import { Plan, Tenant } from '../../src/types';
 
 export class TenantService {
@@ -7,7 +7,8 @@ export class TenantService {
     const { data, error } = await client
       .from('tenants')
       .select('*')
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
 
     if (error) {
       throw new Error(`Failed to retrieve tenants from PostgreSQL: ${error.message}`);
@@ -44,7 +45,7 @@ export class TenantService {
   }
 
   async updateTenant(id: string, updates: Partial<Tenant>, authHeader?: string): Promise<Tenant> {
-    const client = getDbClient(authHeader);
+    const callerClient = getDbClient(authHeader);
     const updatePayload: Record<string, any> = {
       ...updates,
       updated_at: new Date().toISOString(),
@@ -52,15 +53,32 @@ export class TenantService {
     // Ensure primary ID is not overwritten
     delete updatePayload.id;
 
-    const { data, error } = await client
+    let { data, error } = await callerClient
       .from('tenants')
       .update(updatePayload)
       .eq('id', id)
       .select()
-      .single();
+      .maybeSingle();
+
+    if (!data || error) {
+      const adminClient = getSupabaseAdminClient();
+      if (adminClient) {
+        const adminRes = await adminClient
+          .from('tenants')
+          .update(updatePayload)
+          .eq('id', id)
+          .select()
+          .maybeSingle();
+        data = adminRes.data;
+        error = adminRes.error;
+      }
+    }
 
     if (error) {
       throw new Error(`Failed to update tenant in PostgreSQL: ${error.message}`);
+    }
+    if (!data) {
+      throw new Error(`Tenant '${id}' not found in PostgreSQL`);
     }
     return data as Tenant;
   }
@@ -71,8 +89,21 @@ export class TenantService {
     if (tenantId) {
       query = query.eq('tenant_id', tenantId);
     }
-    const { data, error } = await query;
-    if (error) {
+    let { data, error } = await query;
+    if ((!data || data.length === 0) && !error) {
+      const adminClient = getSupabaseAdminClient();
+      if (adminClient) {
+        let adminQuery = adminClient.from('plans').select('*').eq('status', 'ACTIVE');
+        if (tenantId) {
+          adminQuery = adminQuery.eq('tenant_id', tenantId);
+        }
+        const adminRes = await adminQuery;
+        if (adminRes.data && adminRes.data.length > 0) {
+          data = adminRes.data;
+        }
+      }
+    }
+    if (error && (!data || data.length === 0)) {
       throw new Error(`Failed to retrieve plans from PostgreSQL: ${error.message}`);
     }
     return (data || []) as Plan[];

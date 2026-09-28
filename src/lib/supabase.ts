@@ -1,6 +1,20 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const rawUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const getEnvVar = (key: string): string => {
+  try {
+    if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+      return (import.meta as any).env[key] || '';
+    }
+  } catch {}
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env[key] || '';
+    }
+  } catch {}
+  return '';
+};
+
+const rawUrl = getEnvVar('VITE_SUPABASE_URL');
 const match = rawUrl.match(/https:\/\/[a-z0-9-]+\.supabase\.co/i);
 const supabaseUrl = match ? match[0] : rawUrl.trim();
 function sanitizeKey(raw: string): string {
@@ -13,7 +27,7 @@ function sanitizeKey(raw: string): string {
   return trimmed;
 }
 
-const rawKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const rawKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
 const supabaseAnonKey = sanitizeKey(rawKey);
 
 export const supabase: SupabaseClient | null =

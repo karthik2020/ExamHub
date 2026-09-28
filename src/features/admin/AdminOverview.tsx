@@ -18,7 +18,7 @@ import { useTenant } from '../../contexts/TenantContext';
 import { adminService, AdminOverviewStats } from '../../services/adminService';
 
 export const AdminOverview: React.FC = () => {
-  const { currentTenant } = useTenant();
+  const { currentTenant, activeExam } = useTenant();
   const { role, switchDemoProfile, setLoginModalOpen } = useAuth();
   const [stats, setStats] = useState<AdminOverviewStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,10 +99,25 @@ export const AdminOverview: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-6">
-        <h1 className="text-2xl font-black text-white tracking-tight">System Overview</h1>
-        <p className="text-xs text-slate-400 mt-1">
-          Active Tenant: <span className="font-semibold text-teal-400">{currentTenant?.name}</span> ({currentTenant?.domain})
-        </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-black text-white tracking-tight">System Overview</h1>
+            <p className="text-xs text-slate-400 mt-1">
+              Active Tenant: <span className="font-semibold text-teal-400">{currentTenant?.name}</span> ({currentTenant?.domain})
+              {activeExam && (
+                <> &bull; Active Exam: <span className="font-semibold text-sky-400">{activeExam.name}</span></>
+              )}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={fetchOverview}
+            className="self-start sm:self-auto px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Refresh Metrics</span>
+          </button>
+        </div>
       </div>
 
       {/* Metrics Row */}
@@ -164,10 +179,10 @@ export const AdminOverview: React.FC = () => {
               <Cpu className="w-5 h-5" />
             </div>
             <h3 className="font-bold text-white text-sm group-hover:text-purple-400 transition-colors">
-              Figure Generator Workbench
+              Generator Workbench
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Test PRNG seeds, visually inspect 4x4 matrix sequences, run the 10-point validator, and push items to the bank.
+              Test PRNG seeds, inspect generated question algorithms, run plugin validators, and push items to the bank.
             </p>
           </div>
           <span className="text-xs text-purple-400 font-bold flex items-center gap-1 mt-4">
@@ -187,7 +202,7 @@ export const AdminOverview: React.FC = () => {
               Question Bank & Preview
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Author and filter multi-choice and figure sequence questions with instant side-by-side graphical preview.
+              Author and filter questions across sections, topics, and assessment types with instant graphical preview.
             </p>
           </div>
           <span className="text-xs text-sky-400 font-bold flex items-center gap-1 mt-4">

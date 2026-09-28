@@ -18,8 +18,8 @@ export const Footer: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Configurable, high-concurrency online examination engine supporting deterministic figure sequence drills,
-              sectional mocks, and automated assessment scoring.
+              Configurable, high-concurrency online examination engine supporting interactive practice drills,
+              timed sectional mocks, and automated assessment scoring.
             </p>
             <div className="flex items-center gap-2 text-xs text-slate-500">
               <ShieldCheck className="w-4 h-4 text-teal-400" />

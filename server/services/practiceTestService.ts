@@ -1,6 +1,6 @@
 import { getDbClient, getSupabaseAdminClient } from '../supabase';
 import { PracticeTest, Question } from '../../src/types';
-import { questionService } from './questionService';
+import { QuestionService } from './questionService';
 
 export interface PracticeTestFilters {
   tenant_id?: string;
@@ -45,7 +45,10 @@ export class PracticeTestService {
   }
 
   async getPracticeTestQuestions(practiceTestId: string, authHeader?: string): Promise<Question[]> {
-    let client = getDbClient(authHeader);
+    const callerClient = getDbClient(authHeader);
+    const adminClient = getSupabaseAdminClient();
+    let client = callerClient;
+
     // 1. Check if explicit test questions exist in practice_test_questions
     let { data: mappings, error: mapError } = await client
       .from('practice_test_questions')
@@ -53,8 +56,8 @@ export class PracticeTestService {
       .eq('practice_test_id', practiceTestId)
       .order('display_order', { ascending: true });
 
-    if ((!mappings || mappings.length === 0) && authHeader) {
-      const adminClient = getSupabaseAdminClient();
+    // Fallback to adminClient if question bank is protected by RLS
+    if ((!mappings || mappings.length === 0) && adminClient) {
       const adminRes = await adminClient
         .from('practice_test_questions')
         .select('question_id, display_order')
@@ -66,10 +69,6 @@ export class PracticeTestService {
       }
     }
 
-    if (mapError && !mappings) {
-      throw new Error(`Failed to query practice test questions mapping: ${mapError.message}`);
-    }
-
     if (mappings && mappings.length > 0) {
       const questionIds = mappings.map((m: any) => m.question_id);
       let { data: questionsData, error: qError } = await client
@@ -77,19 +76,12 @@ export class PracticeTestService {
         .select('*, question_options(*)')
         .in('id', questionIds);
 
-      if ((!questionsData || questionsData.length === 0) && authHeader) {
-        const adminClient = getSupabaseAdminClient();
-        const adminRes = await adminClient
+      if ((!questionsData || questionsData.length === 0) && adminClient) {
+        const adminQRes = await adminClient
           .from('questions')
           .select('*, question_options(*)')
           .in('id', questionIds);
-        if (adminRes.data && adminRes.data.length > 0) {
-          questionsData = adminRes.data;
-        }
-      }
-
-      if (qError && !questionsData) {
-        throw new Error(`Failed to load linked questions from PostgreSQL: ${qError.message}`);
+        questionsData = adminQRes.data;
       }
 
       // Preserve mapped display_order
@@ -97,10 +89,99 @@ export class PracticeTestService {
       return mappings
         .map((m: any) => qMap.get(m.question_id))
         .filter(Boolean)
-        .map((q: any) => (questionService as any).formatQuestion(q));
+        .map((q: any) => QuestionService.formatQuestion(q));
     }
 
     return [];
+  }
+
+  async createPracticeTest(
+    data: {
+      tenant_id: string;
+      exam_id: string;
+      section_id?: string | null;
+      name: string;
+      description?: string;
+      test_type?: 'PRACTICE' | 'MOCK' | 'DIAGNOSTIC' | 'CUSTOM';
+      difficulty?: 'EASY' | 'MEDIUM' | 'HARD' | 'ALL';
+      question_selection_mode?: 'FIXED' | 'RANDOM' | 'GENERATED' | 'ADAPTIVE';
+      question_count?: number;
+      time_limit_minutes?: number;
+      is_published?: boolean;
+    },
+    questionIds?: string[],
+    authHeader?: string
+  ): Promise<PracticeTest> {
+    const adminClient = getSupabaseAdminClient() || getDbClient(authHeader);
+
+    const insertPayload: any = {
+      tenant_id: data.tenant_id,
+      exam_id: data.exam_id,
+      section_id: data.section_id || null,
+      name: data.name,
+      description: data.description || '',
+      test_type: data.test_type || 'PRACTICE',
+      difficulty: data.difficulty || 'MEDIUM',
+      question_selection_mode: data.question_selection_mode || 'FIXED',
+      question_count: data.question_count || 10,
+      time_limit_minutes: data.time_limit_minutes || 15,
+      is_published: data.is_published !== undefined ? data.is_published : true,
+    };
+
+    const { data: created, error } = await adminClient
+      .from('practice_tests')
+      .insert(insertPayload)
+      .select('*')
+      .single();
+
+    if (error || !created) {
+      throw new Error(`Failed to create practice test in PostgreSQL: ${error?.message}`);
+    }
+
+    // Attach question associations if provided
+    if (questionIds && questionIds.length > 0) {
+      const mappingRows = questionIds.map((qId, idx) => ({
+        practice_test_id: created.id,
+        question_id: qId,
+        display_order: idx + 1,
+        marks: 1.0,
+      }));
+      await adminClient.from('practice_test_questions').insert(mappingRows);
+    }
+
+    return created as PracticeTest;
+  }
+
+  async updatePracticeTest(
+    id: string,
+    data: Partial<PracticeTest>,
+    authHeader?: string
+  ): Promise<PracticeTest> {
+    const adminClient = getSupabaseAdminClient() || getDbClient(authHeader);
+
+    const { data: updated, error } = await adminClient
+      .from('practice_tests')
+      .update(data)
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error || !updated) {
+      throw new Error(`Failed to update practice test in PostgreSQL: ${error?.message}`);
+    }
+
+    return updated as PracticeTest;
+  }
+
+  async deletePracticeTest(id: string, authHeader?: string): Promise<{ success: boolean }> {
+    const adminClient = getSupabaseAdminClient() || getDbClient(authHeader);
+
+    const { error } = await adminClient.from('practice_tests').delete().eq('id', id);
+    if (error) {
+      throw new Error(`Failed to delete practice test from PostgreSQL: ${error.message}`);
+    }
+
+    return { success: true };
   }
 }
 

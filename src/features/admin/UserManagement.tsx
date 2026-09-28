@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { ShieldCheck, UserCheck, Users } from 'lucide-react';
+import { useTenant } from '../../contexts/TenantContext';
 import { adminService } from '../../services/adminService';
 import { Role, User, UserTier } from '../../types';
 
 export const UserManagement: React.FC = () => {
+  const { currentTenant } = useTenant();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -12,7 +14,7 @@ export const UserManagement: React.FC = () => {
     setLoading(true);
     setError(null);
     adminService
-      .getUsers()
+      .getUsers(currentTenant?.id)
       .then((data) => {
         setUsers(data);
         setError(null);
@@ -25,7 +27,7 @@ export const UserManagement: React.FC = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [currentTenant?.id]);
 
   const handleRoleChange = async (userId: string, newRole: Role, newTier: UserTier) => {
     try {

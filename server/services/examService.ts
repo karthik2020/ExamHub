@@ -1,4 +1,4 @@
-import { getDbClient } from '../supabase';
+import { getDbClient, getSupabaseAdminClient } from '../supabase';
 import { Exam, ExamSection, Topic } from '../../src/types';
 
 export class ExamService {
@@ -74,6 +74,34 @@ export class ExamService {
       throw new Error(`Failed to retrieve topics from PostgreSQL: ${error.message}`);
     }
     return (data || []) as Topic[];
+  }
+
+  async createSection(sectionData: Partial<ExamSection>, authHeader?: string): Promise<ExamSection> {
+    const client = getSupabaseAdminClient() || getDbClient(authHeader);
+    const { data, error } = await client
+      .from('exam_sections')
+      .insert([sectionData])
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create exam section in PostgreSQL: ${error.message}`);
+    }
+    return data as ExamSection;
+  }
+
+  async createTopic(topicData: Partial<Topic>, authHeader?: string): Promise<Topic> {
+    const client = getSupabaseAdminClient() || getDbClient(authHeader);
+    const { data, error } = await client
+      .from('topics')
+      .insert([topicData])
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create topic in PostgreSQL: ${error.message}`);
+    }
+    return data as Topic;
   }
 }
 

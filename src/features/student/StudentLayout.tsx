@@ -19,7 +19,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTenant } from '../../contexts/TenantContext';
 
 export const StudentLayout: React.FC = () => {
-  const { currentTenant, studentPortalPath } = useTenant();
+  const { currentTenant, studentPortalPath, activeExam } = useTenant();
   const { user, tier } = useAuth();
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
@@ -55,6 +55,18 @@ export const StudentLayout: React.FC = () => {
               </div>
             </div>
 
+            {/* Active Exam Badge in Sidebar */}
+            {activeExam && (
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                  Target Exam
+                </span>
+                <span className="font-bold text-slate-800 block truncate" title={activeExam.name}>
+                  {activeExam.name}
+                </span>
+              </div>
+            )}
+
             {/* Navigation List */}
             <nav className="space-y-1">
               {navItems.map((item) => {
@@ -87,10 +99,10 @@ export const StudentLayout: React.FC = () => {
               </div>
               <p className="text-[11px] text-teal-800/80 leading-relaxed">
                 {tier === 'PAID'
-                  ? 'Procedural Figure Sequence generator is unlocked without cap.'
+                  ? 'Procedural question generator is unlocked without limits.'
                   : tier === 'REGISTERED'
-                  ? '20 fixed questions available in your verified bank.'
-                  : '10 fixed questions in Guest mode. Register to unlock 20.'}
+                  ? '20 questions available in your verified bank.'
+                  : '10 questions in Guest mode. Register to unlock expanded bank.'}
               </p>
             </div>
           </div>

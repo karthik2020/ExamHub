@@ -2,13 +2,22 @@ import React, { useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Footer } from './components/common/Footer';
 import { Header } from './components/common/Header';
+import { PublicFooter } from './components/common/PublicFooter';
+import { PublicHeader } from './components/common/PublicHeader';
 import { ProfileModal } from './components/common/ProfileModal';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TenantProvider, useTenant } from './contexts/TenantContext';
 
 // Public Pages
 import { CMSDynamicPage } from './features/public/CMSDynamicPage';
 import { HomePage } from './features/public/HomePage';
+import { PracticePage } from './features/public/PracticePage';
+import { HowItWorksPage } from './features/public/HowItWorksPage';
+import { FeaturesPage } from './features/public/FeaturesPage';
+import { PricingPage } from './features/public/PricingPage';
+import { FAQPage } from './features/public/FAQPage';
+import { AboutPage } from './features/public/AboutPage';
+import { ContactPage } from './features/public/ContactPage';
 
 // Student Portal Pages
 import { AttemptResults } from './features/student/AttemptResults';
@@ -24,6 +33,7 @@ import { AdminLayout } from './features/admin/AdminLayout';
 import { AdminOverview } from './features/admin/AdminOverview';
 import { AuditLogsView } from './features/admin/AuditLogsView';
 import { GeneratorWorkbench } from './features/admin/GeneratorWorkbench';
+import { PracticeTestManager } from './features/admin/PracticeTestManager';
 import { QuestionBankManager } from './features/admin/QuestionBankManager';
 import { TenantBrandingEditor } from './features/admin/TenantBrandingEditor';
 import { UserManagement } from './features/admin/UserManagement';
@@ -34,20 +44,35 @@ const PublicLayout: React.FC<{ children: React.ReactNode; onOpenProfile: () => v
 }) => {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans antialiased">
-      <Header onOpenProfileModal={onOpenProfile} />
+      <PublicHeader onOpenAuthModal={onOpenProfile} />
       <main className="flex-1">{children}</main>
-      <Footer />
+      <PublicFooter />
     </div>
   );
 };
 
+const StudentPortalLayoutWrapper: React.FC<{ onOpenProfile: () => void }> = ({ onOpenProfile }) => (
+  <div className="min-h-screen flex flex-col bg-slate-100/70">
+    <Header onOpenProfileModal={onOpenProfile} />
+    <StudentLayout />
+    <Footer />
+  </div>
+);
+
 const MainRouter: React.FC = () => {
   const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const { studentPortalPath } = useTenant();
+  const { loginModalOpen, setLoginModalOpen } = useAuth();
+  const { studentPortalPath, availableTenants } = useTenant();
+
+  const isModalOpen = profileModalOpen || loginModalOpen;
+  const handleCloseModal = () => {
+    setProfileModalOpen(false);
+    setLoginModalOpen(false);
+  };
 
   return (
     <>
-      <ProfileModal isOpen={profileModalOpen} onClose={() => setProfileModalOpen(false)} />
+      <ProfileModal isOpen={isModalOpen} onClose={handleCloseModal} />
 
       <Routes>
         {/* Public Website Routes */}
@@ -60,13 +85,63 @@ const MainRouter: React.FC = () => {
           }
         />
         <Route
-          path="/about"
+          path="/practice"
           element={
             <PublicLayout onOpenProfile={() => setProfileModalOpen(true)}>
-              <CMSDynamicPage forcedSlug="about" />
+              <PracticePage />
             </PublicLayout>
           }
         />
+        <Route
+          path="/how-it-works"
+          element={
+            <PublicLayout onOpenProfile={() => setProfileModalOpen(true)}>
+              <HowItWorksPage />
+            </PublicLayout>
+          }
+        />
+        <Route
+          path="/features"
+          element={
+            <PublicLayout onOpenProfile={() => setProfileModalOpen(true)}>
+              <FeaturesPage />
+            </PublicLayout>
+          }
+        />
+        <Route
+          path="/pricing"
+          element={
+            <PublicLayout onOpenProfile={() => setProfileModalOpen(true)}>
+              <PricingPage />
+            </PublicLayout>
+          }
+        />
+        <Route
+          path="/faq"
+          element={
+            <PublicLayout onOpenProfile={() => setProfileModalOpen(true)}>
+              <FAQPage />
+            </PublicLayout>
+          }
+        />
+        <Route
+          path="/about"
+          element={
+            <PublicLayout onOpenProfile={() => setProfileModalOpen(true)}>
+              <AboutPage />
+            </PublicLayout>
+          }
+        />
+        <Route
+          path="/contact"
+          element={
+            <PublicLayout onOpenProfile={() => setProfileModalOpen(true)}>
+              <ContactPage />
+            </PublicLayout>
+          }
+        />
+
+        {/* Dynamic Fallback CMS Pages */}
         <Route
           path="/exam"
           element={
@@ -91,33 +166,11 @@ const MainRouter: React.FC = () => {
             </PublicLayout>
           }
         />
-        <Route
-          path="/pricing"
-          element={
-            <PublicLayout onOpenProfile={() => setProfileModalOpen(true)}>
-              <CMSDynamicPage forcedSlug="pricing" />
-            </PublicLayout>
-          }
-        />
-        <Route
-          path="/faq"
-          element={
-            <PublicLayout onOpenProfile={() => setProfileModalOpen(true)}>
-              <CMSDynamicPage forcedSlug="faq" />
-            </PublicLayout>
-          }
-        />
 
-        {/* Student Portal (EMS) Routes */}
+        {/* Dynamic Student Portal Routes - Supported Paths (/ems, /portal, or dynamic tenant student_path) */}
         <Route
           path="/ems"
-          element={
-            <div className="min-h-screen flex flex-col bg-slate-100/70">
-              <Header onOpenProfileModal={() => setProfileModalOpen(true)} />
-              <StudentLayout />
-              <Footer />
-            </div>
-          }
+          element={<StudentPortalLayoutWrapper onOpenProfile={() => setProfileModalOpen(true)} />}
         >
           <Route index element={<StudentDashboard />} />
           <Route path="practice" element={<PracticeSession />} />
@@ -127,11 +180,38 @@ const MainRouter: React.FC = () => {
           <Route path="study-plan" element={<StudyPlanView />} />
         </Route>
 
+        <Route
+          path="/portal"
+          element={<StudentPortalLayoutWrapper onOpenProfile={() => setProfileModalOpen(true)} />}
+        >
+          <Route index element={<StudentDashboard />} />
+          <Route path="practice" element={<PracticeSession />} />
+          <Route path="mock-tests" element={<MockTestSession />} />
+          <Route path="results/:attemptId" element={<AttemptResults />} />
+          <Route path="progress" element={<StudentProgress />} />
+          <Route path="study-plan" element={<StudyPlanView />} />
+        </Route>
+
+        {studentPortalPath !== '/ems' && studentPortalPath !== '/portal' && (
+          <Route
+            path={studentPortalPath}
+            element={<StudentPortalLayoutWrapper onOpenProfile={() => setProfileModalOpen(true)} />}
+          >
+            <Route index element={<StudentDashboard />} />
+            <Route path="practice" element={<PracticeSession />} />
+            <Route path="mock-tests" element={<MockTestSession />} />
+            <Route path="results/:attemptId" element={<AttemptResults />} />
+            <Route path="progress" element={<StudentProgress />} />
+            <Route path="study-plan" element={<StudyPlanView />} />
+          </Route>
+        )}
+
         {/* Admin Portal Routes */}
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminOverview />} />
           <Route path="branding" element={<TenantBrandingEditor />} />
           <Route path="questions" element={<QuestionBankManager />} />
+          <Route path="tests" element={<PracticeTestManager />} />
           <Route path="generator" element={<GeneratorWorkbench />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="audit-logs" element={<AuditLogsView />} />

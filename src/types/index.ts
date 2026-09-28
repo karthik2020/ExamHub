@@ -231,8 +231,46 @@ export interface Plan {
   price: number;
   currency: string;
   billing_interval: 'ONE_TIME' | 'MONTHLY' | 'ANNUAL';
+  duration_days?: number;
+  external_price_id?: string;
   features: string[];
   status: 'ACTIVE' | 'ARCHIVED';
+}
+
+export interface Subscription {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  plan_id: string;
+  status: 'ACTIVE' | 'CANCELLED' | 'EXPIRED' | 'PAST_DUE';
+  started_at: string;
+  expires_at?: string | null;
+  cancelled_at?: string | null;
+  provider?: string;
+  provider_subscription_id?: string | null;
+  provider_customer_id?: string | null;
+  current_period_start?: string | null;
+  current_period_end?: string | null;
+  grace_until?: string | null;
+  cancel_at_period_end?: boolean;
+}
+
+export interface Payment {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  subscription_id?: string | null;
+  provider: string;
+  provider_payment_id: string;
+  provider_customer_id?: string | null;
+  amount: number;
+  currency: string;
+  status: 'COMPLETED' | 'PENDING' | 'FAILED' | 'REFUNDED';
+  receipt_url?: string | null;
+  invoice_url?: string | null;
+  failure_code?: string | null;
+  failure_message?: string | null;
+  created_at: string;
 }
 
 export interface ValidationCheck {

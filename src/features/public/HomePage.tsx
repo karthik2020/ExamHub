@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React from 'react';
+import { Link } from 'react-router-dom';
 import {
   ArrowRight,
   Award,
@@ -8,313 +8,449 @@ import {
   Cpu,
   Layers,
   Sparkles,
-  Zap,
+  Shield,
+  GraduationCap,
+  Compass,
+  FileCheck2,
+  BarChart3,
+  HelpCircle,
+  Check,
 } from 'lucide-react';
-import { FigureSequenceGrid } from '../../components/figure-sequence/FigureSequenceGrid';
-import { useAuth } from '../../contexts/AuthContext';
+import { FigureSequenceShowcase } from '../../components/figure-sequence/FigureSequenceShowcase';
+import { SEOHead } from '../../components/common/SEOHead';
 import { useTenant } from '../../contexts/TenantContext';
-import { generateFigureSequence } from '../../generator/figureSequenceEngine';
+import { useAuth } from '../../contexts/AuthContext';
 
 export const HomePage: React.FC = () => {
-  const { currentTenant, studentPortalPath } = useTenant();
-  const { tier } = useAuth();
-  const navigate = useNavigate();
-
-  // Interactive micro-drill preview for the landing page
-  const [interactiveQuestion] = useState(() => {
-    const { question } = generateFigureSequence(
-      'home-interactive-demo',
-      'EASY',
-      'e0000000-0000-0000-0000-000000000001',
-      's0000000-0000-0000-0000-000000000001',
-      currentTenant?.id || 'a0000000-0000-0000-0000-000000000001'
-    );
-    return question;
-  });
-
-  const [selectedDemoOption, setSelectedDemoOption] = useState<string | null>(null);
-  const [demoChecked, setDemoChecked] = useState(false);
-
-  const givenSteps = interactiveQuestion.question_data?.steps?.slice(0, 4) || [];
+  const { studentPortalPath } = useTenant();
+  const { setLoginModalOpen, isAuthenticated } = useAuth();
 
   return (
-    <div className="space-y-16 py-8 sm:py-12">
+    <div className="space-y-24 py-10 sm:py-16">
+      <SEOHead
+        title="dMATHub — Master the Doctoral Management Aptitude Test"
+        description="The dedicated preparation platform for the dMAT. Master 4x4 figure sequences, modular algebra, Latin squares, and full-length timed mock exams."
+        canonical="https://dmathub.com/"
+      />
+
       {/* 1. Hero Section */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-          <div className="lg:col-span-7 space-y-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-50 border border-teal-200 text-teal-800 text-xs font-semibold uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-              <span>Standardized Examination Platform</span>
-            </div>
-
-            <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
-              Master the <span className="text-teal-700">{currentTenant?.name}</span> with Mathematical Precision.
-            </h1>
-
-            <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl">
-              Engineered specifically for competitive admission and certification candidates. Practice with
-              deterministic 4x4 matrix figure sequences, timed sectional simulations, and authoritative step-by-step
-              analytical solutions.
-            </p>
-
-            <div className="flex flex-wrap items-center gap-3.5 pt-2">
-              <Link
-                to={`${studentPortalPath}/practice`}
-                id="hero-start-practice"
-                className="px-6 py-3.5 rounded-xl bg-teal-700 text-white font-bold text-sm hover:bg-teal-800 transition-all shadow-md flex items-center gap-2"
-              >
-                <span>Start Free Diagnostic Test</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-
-              <Link
-                to="/exam"
-                className="px-5 py-3.5 rounded-xl bg-white border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-all"
-              >
-                View Exam Format & Syllabus
-              </Link>
-            </div>
-
-            {/* Quick trust metrics */}
-            <div className="pt-6 border-t border-slate-200/80 grid grid-cols-3 gap-4 max-w-lg">
-              <div>
-                <div className="text-2xl font-black text-slate-900">4x4</div>
-                <div className="text-xs text-slate-500 font-medium">Matrix Sequences</div>
-              </div>
-              <div>
-                <div className="text-2xl font-black text-slate-900">90 Min</div>
-                <div className="text-xs text-slate-500 font-medium">Official Simulation</div>
-              </div>
-              <div>
-                <div className="text-2xl font-black text-slate-900">100%</div>
-                <div className="text-xs text-slate-500 font-medium">Deterministic Logic</div>
-              </div>
-            </div>
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center max-w-3xl mx-auto space-y-6">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-50 border border-teal-200 text-teal-800 text-xs font-bold uppercase tracking-wider">
+            <GraduationCap className="w-4 h-4 text-teal-700" />
+            <span>Dedicated dMAT Examination Preparation</span>
           </div>
 
-          {/* Right Hero Card: Live Interactive Preview */}
-          <div className="lg:col-span-5">
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xl relative overflow-hidden">
-              <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-teal-600 animate-pulse"></span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                    Live Sample: 4x4 Grid Drill
-                  </span>
-                </div>
-                <span className="text-xs font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded">
-                  Difficulty: {interactiveQuestion.difficulty}
-                </span>
-              </div>
+          <h1 className="text-4xl sm:text-6xl font-black text-slate-900 tracking-tight leading-[1.12]">
+            Master the <span className="text-teal-700">dMAT</span> with Systematic Mathematical Rigor.
+          </h1>
 
-              <div className="space-y-4">
-                <p className="text-xs text-slate-600">
-                  Deduce the position transition across Grids 1 to 4. What must Grids 5 & 6 be?
-                </p>
+          <p className="text-base sm:text-xl text-slate-600 leading-relaxed font-normal">
+            The focused preparation platform for Doctoral Management Aptitude Test candidates.
+            Practice with deterministic 4x4 matrix figure sequences, timed sectional simulations,
+            and authoritative step-by-step analytical solutions.
+          </p>
 
-                {/* 4 Given Grids */}
-                <div className="grid grid-cols-4 gap-2 items-center justify-center p-2 bg-slate-50 rounded-xl border border-slate-200/80">
-                  {givenSteps.map((grid, idx) => (
-                    <FigureSequenceGrid key={idx} grid={grid} label={`G${idx + 1}`} size="sm" />
-                  ))}
-                </div>
+          <div className="pt-2 flex flex-wrap items-center justify-center gap-4">
+            <Link
+              to={`${studentPortalPath || '/ems'}/practice`}
+              id="hero-cta-practice"
+              className="px-7 py-4 rounded-xl bg-teal-700 text-white font-bold text-sm sm:text-base hover:bg-teal-800 transition-all shadow-md hover:shadow-lg flex items-center gap-2.5"
+            >
+              <span>Start Free Diagnostic Test</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
 
-                {/* Missing prompt */}
-                <div className="flex items-center justify-center gap-3 py-2 bg-teal-50/50 rounded-lg border border-dashed border-teal-300 text-xs text-teal-800 font-medium">
-                  <span>Grid 5 = ?</span>
-                  <span>•</span>
-                  <span>Grid 6 = ?</span>
-                </div>
+            <Link
+              to="/practice"
+              id="hero-cta-curriculum"
+              className="px-6 py-4 rounded-xl bg-white border border-slate-300 text-slate-700 font-bold text-sm sm:text-base hover:bg-slate-50 transition-all shadow-xs"
+            >
+              Explore Curriculum & Format
+            </Link>
+          </div>
 
-                {/* Options preview */}
-                <div className="grid grid-cols-2 gap-2">
-                  {interactiveQuestion.options.map((opt) => {
-                    const isSel = selectedDemoOption === opt.option_key;
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedDemoOption(opt.option_key);
-                          setDemoChecked(false);
-                        }}
-                        className={`p-2 rounded-lg border text-left flex items-center justify-between text-xs transition-all cursor-pointer ${
-                          isSel
-                            ? 'border-teal-600 bg-teal-50 font-bold text-teal-900'
-                            : 'border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <span>Option {opt.option_key}</span>
-                        {demoChecked && opt.option_key === interactiveQuestion.correct_answer && (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    disabled={!selectedDemoOption}
-                    onClick={() => setDemoChecked(true)}
-                    className="flex-1 py-2 rounded-lg bg-teal-700 text-white font-semibold text-xs disabled:opacity-40 hover:bg-teal-800 transition-colors"
-                  >
-                    Check Answer
-                  </button>
-
-                  <Link
-                    to={`${studentPortalPath}/practice`}
-                    className="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold text-xs hover:bg-slate-200 transition-colors"
-                  >
-                    Full Practice →
-                  </Link>
-                </div>
-
-                {demoChecked && (
-                  <div
-                    className={`p-2.5 rounded-lg text-xs ${
-                      selectedDemoOption === interactiveQuestion.correct_answer
-                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                        : 'bg-amber-50 text-amber-800 border border-amber-200'
-                    }`}
-                  >
-                    {selectedDemoOption === interactiveQuestion.correct_answer ? (
-                      <span className="font-bold">Correct! Well done!</span>
-                    ) : (
-                      <span>The correct choice is Option {interactiveQuestion.correct_answer}.</span>
-                    )}
-                  </div>
-                )}
-              </div>
+          {/* Factual Core Metrics */}
+          <div className="pt-10 border-t border-slate-200/80 grid grid-cols-2 sm:grid-cols-4 gap-6 max-w-3xl mx-auto text-left">
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60">
+              <div className="text-2xl font-black text-slate-900">4 Modules</div>
+              <div className="text-xs text-slate-500 font-medium mt-0.5">Full Curriculum Coverage</div>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60">
+              <div className="text-2xl font-black text-slate-900">4x4 Grids</div>
+              <div className="text-xs text-slate-500 font-medium mt-0.5">Vector & Symmetry Invariants</div>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60">
+              <div className="text-2xl font-black text-slate-900">90 Mins</div>
+              <div className="text-xs text-slate-500 font-medium mt-0.5">Timed Full Simulation</div>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60">
+              <div className="text-2xl font-black text-slate-900">65% Target</div>
+              <div className="text-xs text-slate-500 font-medium mt-0.5">Empirical Readiness Index</div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 2. Core Modules / Exam Sections */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="text-center max-w-2xl mx-auto mb-10">
-          <h2 className="text-2xl sm:text-3xl font-black text-slate-900">
-            {currentTenant?.slug === 'dmathub' ? 'dMAT Official 4-Section Curriculum' : 'Curriculum Structure'}
+      {/* 2. Figure Sequence Interactive Showcase */}
+      <section id="demo" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <FigureSequenceShowcase />
+      </section>
+
+      {/* 3. The 4 Curriculum Sections */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center max-w-3xl mx-auto mb-12">
+          <span className="text-xs font-bold uppercase tracking-wider text-teal-700">Official Curriculum Coverage</span>
+          <h2 className="text-3xl sm:text-4xl font-black text-slate-900 mt-2">
+            Engineered for the Four dMAT Modules
           </h2>
-          <p className="text-sm text-slate-600 mt-2">
-            Structured modules designed to test abstract spatial reasoning, modular algebra, and academic deduction.
+          <p className="text-slate-600 text-sm sm:text-base mt-2">
+            Each section targets specific cognitive competencies demanded by doctoral and graduate management admissions.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-shadow">
-            <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-black mb-4">
-              1
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs hover:border-teal-300 transition-all flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-black text-base">
+                1
+              </div>
+              <h3 className="font-bold text-slate-900 text-lg">Figure Sequences</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                4x4 matrix vector movements, border reflections, rotational symmetries, and multi-symbol collision bounds.
+              </p>
             </div>
-            <h3 className="font-bold text-slate-900 text-lg mb-1">Figure Sequences</h3>
-            <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-              Identify 4x4 matrix vector movements, border reflections, rotational symmetries, and multi-symbol collisions.
-            </p>
-            <div className="text-xs font-semibold text-teal-700 flex items-center gap-1">
-              <span>20 Questions • 25 Mins</span>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-shadow">
-            <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-800 flex items-center justify-center font-black mb-4">
-              2
-            </div>
-            <h3 className="font-bold text-slate-900 text-lg mb-1">Mathematical Equations</h3>
-            <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-              Solve complex algebraic systems, unknown operator definitions, and modular arithmetic constraints under time pressure.
-            </p>
-            <div className="text-xs font-semibold text-sky-700 flex items-center gap-1">
-              <span>20 Questions • 25 Mins</span>
+            <div className="pt-6 border-t border-slate-100 flex items-center justify-between text-xs">
+              <span className="font-bold text-teal-800">20 Questions</span>
+              <span className="text-slate-500">25 Mins Limit</span>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-shadow">
-            <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-800 flex items-center justify-center font-black mb-4">
-              3
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs hover:border-sky-300 transition-all flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-800 flex items-center justify-center font-black text-base">
+                2
+              </div>
+              <h3 className="font-bold text-slate-900 text-lg">Mathematical Equations</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Modular arithmetic, operator replacements, linear and non-linear constraint systems under strict time limits.
+              </p>
             </div>
-            <h3 className="font-bold text-slate-900 text-lg mb-1">Latin Squares</h3>
-            <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-              Orthogonal deduction puzzles where every symbol must appear exactly once across rows and columns.
-            </p>
-            <div className="text-xs font-semibold text-indigo-700 flex items-center gap-1">
-              <span>15 Questions • 20 Mins</span>
+            <div className="pt-6 border-t border-slate-100 flex items-center justify-between text-xs">
+              <span className="font-bold text-sky-800">20 Questions</span>
+              <span className="text-slate-500">25 Mins Limit</span>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-shadow">
-            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-black mb-4">
-              4
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-300 transition-all flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-800 flex items-center justify-center font-black text-base">
+                3
+              </div>
+              <h3 className="font-bold text-slate-900 text-lg">Latin Squares</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Orthogonal deduction puzzles where every symbol must appear exactly once across all rows and columns.
+              </p>
             </div>
-            <h3 className="font-bold text-slate-900 text-lg mb-1">Academic Reasoning</h3>
-            <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-              Critically analyze research abstracts, evaluate hypothesis validity, and assess scientific syllogisms.
-            </p>
-            <div className="text-xs font-semibold text-amber-700 flex items-center gap-1">
-              <span>15 Questions • 20 Mins</span>
+            <div className="pt-6 border-t border-slate-100 flex items-center justify-between text-xs">
+              <span className="font-bold text-indigo-800">15 Questions</span>
+              <span className="text-slate-500">20 Mins Limit</span>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs hover:border-amber-300 transition-all flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-black text-base">
+                4
+              </div>
+              <h3 className="font-bold text-slate-900 text-lg">Academic Reasoning</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Critical analysis of research abstracts, scientific charts, hypothesis testing, and logical deductions.
+              </p>
+            </div>
+            <div className="pt-6 border-t border-slate-100 flex items-center justify-between text-xs">
+              <span className="font-bold text-amber-800">15 Questions</span>
+              <span className="text-slate-500">20 Mins Limit</span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 3. Reusable Platform Highlights */}
-      <section className="bg-slate-900 text-white py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+      {/* 4. Why Prepare with dMATHub */}
+      <section className="bg-slate-900 text-white py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-teal-400">
+              Technical Precision & Pedagogy
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-black">Why Candidates Choose dMATHub</h2>
+            <p className="text-sm sm:text-base text-slate-400">
+              Generic aptitude tools rely on static PDFs and unverified answer keys. dMATHub is engineered from the ground up for the specific dMAT format.
+            </p>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="space-y-3">
+            <div className="p-6 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-4">
               <div className="w-12 h-12 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-400">
                 <Cpu className="w-6 h-6" />
               </div>
-              <h3 className="text-lg font-bold">Procedural Deterministic Generator</h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                10-point mathematical validation ensures every generated figure sequence has exactly one unique logical
-                solution, no duplicate distractors, and reproducible seeds.
+              <h3 className="text-lg font-bold text-white">Deterministic Procedural Generator</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Our mathematical generator ensures that every procedural figure sequence has exactly one unique logical
+                solution, no duplicate distractors, and verifiable reproducible seeds.
               </p>
             </div>
 
-            <div className="space-y-3">
+            <div className="p-6 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-4">
               <div className="w-12 h-12 rounded-xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400">
                 <Clock className="w-6 h-6" />
               </div>
-              <h3 className="text-lg font-bold">Authoritative Server Scoring</h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Zero client-side trust. Countdown timers, question answers, and results are computed and persisted in
+              <h3 className="text-lg font-bold text-white">Authoritative Server Scoring</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Zero client-side trust. Countdown timers, question answers, and scoring formulas are computed and persisted in
                 PostgreSQL with state recovery on page refresh.
               </p>
             </div>
 
-            <div className="space-y-3">
+            <div className="p-6 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-4">
               <div className="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
-                <Layers className="w-6 h-6" />
+                <BarChart3 className="w-6 h-6" />
               </div>
-              <h3 className="text-lg font-bold">Multi-Tenant SaaS Foundation</h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Create new examination portals (NISM, ISTQB, University Admissions) without touching core engine code.
-                All branding, questions, and configs are isolated.
+              <h3 className="text-lg font-bold text-white">Empirical Readiness Index</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                No subjective star ratings. Your readiness score (0–100) measures your historical accuracy directly against
+                the 65% target passing threshold, highlighting weak topics automatically.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 4. Bottom CTA banner */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="bg-gradient-to-r from-teal-800 to-slate-900 rounded-3xl p-8 sm:p-12 text-white flex flex-col md:flex-row items-center justify-between gap-8 shadow-xl">
-          <div className="space-y-2 max-w-xl">
-            <h3 className="text-2xl sm:text-3xl font-black">Ready to test your analytical readiness?</h3>
-            <p className="text-sm text-teal-100">
-              Try the 10-question fixed diagnostic test immediately as a Guest, or register to unlock the full 20-item
-              bank and performance dashboard.
+      {/* 5. 5-Step Candidate Journey */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center max-w-2xl mx-auto mb-14 space-y-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-teal-700">Methodical Framework</span>
+          <h2 className="text-3xl sm:text-4xl font-black text-slate-900">How It Works</h2>
+          <p className="text-sm text-slate-600">A structured 5-step preparation framework to take you from initial evaluation to examination mastery.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+          {[
+            {
+              step: '1',
+              title: 'Diagnostic Test',
+              desc: 'Take the free 10-question diagnostic to establish your initial sectional baseline without registration.',
+            },
+            {
+              step: '2',
+              title: 'Curriculum Drills',
+              desc: 'Practice high-yield fixed drills in 4x4 matrix sequences, modular algebra, and Latin squares.',
+            },
+            {
+              step: '3',
+              title: 'Procedural Drill (PRO)',
+              desc: 'Generate unlimited fresh variations to train pattern recognition without memorizing static keys.',
+            },
+            {
+              step: '4',
+              title: 'Timed Simulation',
+              desc: 'Simulate full test pressure with strict countdown clocks, section navigation, and zero distractions.',
+            },
+            {
+              step: '5',
+              title: 'Readiness & Plan',
+              desc: 'Inspect step-by-step SVG solutions and follow recommendations until your Readiness Index exceeds 65%.',
+            },
+          ].map((s) => (
+            <div key={s.step} className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2 relative">
+              <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-800 border border-teal-200 flex items-center justify-center font-black text-sm">
+                {s.step}
+              </div>
+              <h4 className="font-bold text-slate-900 text-sm">{s.title}</h4>
+              <p className="text-xs text-slate-600 leading-relaxed">{s.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 6. Pricing & Tier Progression */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center max-w-2xl mx-auto mb-12 space-y-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-teal-700">Transparent Access Plans</span>
+          <h2 className="text-3xl sm:text-4xl font-black text-slate-900">Choose Your Preparation Tier</h2>
+          <p className="text-sm text-slate-600">
+            Start immediately as a Free Guest, register for extended bank access and analytics, or subscribe to Pro for unlimited procedural generation.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
+          {/* Tier 1: Free Guest */}
+          <div className="p-6 sm:p-8 rounded-3xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="space-y-5">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Tier 1</span>
+                <h3 className="text-xl font-black text-slate-900 mt-1">Free Guest</h3>
+                <p className="text-xs text-slate-600 mt-1">
+                  Evaluate the official format and difficulty without creating an account.
+                </p>
+              </div>
+
+              <div className="text-3xl font-black text-slate-900">
+                €0 <span className="text-xs font-medium text-slate-500">Free forever</span>
+              </div>
+
+              <ul className="space-y-3 text-xs text-slate-700">
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span>10-question fixed diagnostic test</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span>Instant server-side score calculation</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span>No credit card or email required</span>
+                </li>
+                <li className="flex items-center gap-2 text-slate-400">
+                  <span className="w-4 h-4 text-center shrink-0">✕</span>
+                  <span>Attempt history & progress tracking</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="pt-6 mt-6 border-t border-slate-100">
+              <Link
+                to={`${studentPortalPath || '/ems'}/practice`}
+                className="w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs text-center block transition-colors"
+              >
+                Start as Guest
+              </Link>
+            </div>
+          </div>
+
+          {/* Tier 2: Registered Member */}
+          <div className="p-6 sm:p-8 rounded-3xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="space-y-5">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-teal-700">Tier 2</span>
+                <h3 className="text-xl font-black text-slate-900 mt-1">Registered Member</h3>
+                <p className="text-xs text-slate-600 mt-1">
+                  Full verified fixed question bank with progress dashboard and solutions.
+                </p>
+              </div>
+
+              <div className="text-3xl font-black text-slate-900">
+                €0 <span className="text-xs font-medium text-slate-500">Free with account</span>
+              </div>
+
+              <ul className="space-y-3 text-xs text-slate-700">
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span>Full fixed verified question bank</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span>Detailed step-by-step SVG solutions</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span>Persistent attempt history & analytics</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span>Readiness Index & topic recommendations</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="pt-6 mt-6 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setLoginModalOpen(true)}
+                className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs text-center block transition-colors cursor-pointer"
+              >
+                Create Free Account
+              </button>
+            </div>
+          </div>
+
+          {/* Tier 3: Pro Unlimited Generator */}
+          <div className="p-6 sm:p-8 rounded-3xl bg-teal-900 text-white shadow-xl flex flex-col justify-between relative overflow-hidden">
+            <div className="space-y-5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-teal-300">Tier 3 • Full Access</span>
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-teal-500/30 text-teal-200 border border-teal-400/40">
+                  Most Comprehensive
+                </span>
+              </div>
+
+              <div>
+                <h3 className="text-xl font-black text-white">Pro Unlimited Generator</h3>
+                <p className="text-xs text-teal-200 mt-1">
+                  Algorithmic endless matrix generation with custom difficulty for complete mastery.
+                </p>
+              </div>
+
+              <div className="text-3xl font-black text-white">
+                €29 <span className="text-xs font-medium text-teal-300">/ month</span>
+              </div>
+
+              <ul className="space-y-3 text-xs text-teal-100">
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-teal-300 shrink-0" />
+                  <span>Unlimited procedural Figure Sequence drills</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-teal-300 shrink-0" />
+                  <span>Configurable difficulty: Easy, Medium, Hard</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-teal-300 shrink-0" />
+                  <span>Full 90-minute timed mock test simulation</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-teal-300 shrink-0" />
+                  <span>Priority weak-topic recommendation engine</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="pt-6 mt-6 border-t border-teal-800">
+              <Link
+                to="/pricing"
+                className="w-full py-3 rounded-xl bg-white text-teal-950 hover:bg-teal-50 font-bold text-xs text-center block transition-colors shadow-md"
+              >
+                View Plan Details
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 7. Bottom Conversion Banner */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="bg-gradient-to-r from-teal-800 to-slate-900 rounded-3xl p-8 sm:p-14 text-white flex flex-col md:flex-row items-center justify-between gap-8 shadow-xl">
+          <div className="space-y-3 max-w-xl">
+            <h3 className="text-2xl sm:text-4xl font-black tracking-tight">
+              Begin Your dMAT Preparation Today
+            </h3>
+            <p className="text-sm sm:text-base text-teal-100 leading-relaxed">
+              Launch the 10-question diagnostic assessment immediately to evaluate your baseline spatial and analytical reasoning.
             </p>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
             <Link
-              to={`${studentPortalPath}/practice`}
-              className="px-6 py-3.5 rounded-xl bg-white text-teal-900 font-bold text-sm hover:bg-teal-50 transition-colors shadow-md"
+              to={`${studentPortalPath || '/ems'}/practice`}
+              className="px-7 py-3.5 rounded-xl bg-white text-teal-950 font-bold text-sm hover:bg-teal-50 transition-colors shadow-md"
             >
-              Start Free Practice →
+              Start Free Diagnostic →
+            </Link>
+            <Link
+              to="/faq"
+              className="px-5 py-3.5 rounded-xl border border-teal-400/40 text-teal-100 font-semibold text-sm hover:bg-teal-800/50 transition-colors"
+            >
+              Candidate FAQ
             </Link>
           </div>
         </div>

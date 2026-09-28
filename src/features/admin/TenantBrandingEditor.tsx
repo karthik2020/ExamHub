@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Check, Palette, RefreshCw, Save, ShieldCheck } from 'lucide-react';
 import { useTenant } from '../../contexts/TenantContext';
 
@@ -17,6 +17,22 @@ export const TenantBrandingEditor: React.FC = () => {
 
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Synchronize form values whenever currentTenant changes
+  useEffect(() => {
+    if (currentTenant) {
+      setFormData({
+        name: currentTenant.name || '',
+        domain: currentTenant.domain || '',
+        logo_url: currentTenant.logo_url || '',
+        favicon_url: currentTenant.favicon_url || '',
+        primary_color: currentTenant.primary_color || '#0f766e',
+        secondary_color: currentTenant.secondary_color || '#0284c7',
+        student_path: currentTenant.student_path || '/ems',
+      });
+      setSaved(false);
+    }
+  }, [currentTenant?.id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
+  BookOpen,
   CheckCircle2,
   Clock,
   RotateCcw,
@@ -14,18 +15,22 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTenant } from '../../contexts/TenantContext';
 import { attemptService, CheckAnswerResponse } from '../../services/attemptService';
 import { examService } from '../../services/examService';
-import { AttemptAnswer, Difficulty, PracticeTest, Question } from '../../types';
+import { AttemptAnswer, Difficulty, ExamSection, PracticeTest, Question } from '../../types';
 
 export const PracticeSession: React.FC = () => {
-  const { currentTenant, studentPortalPath } = useTenant();
+  const { currentTenant, studentPortalPath, activeExam } = useTenant();
   const { user, tier } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Test Selection & Setup State
-  const testIdParam = searchParams.get('test_id') || 'pt-diagnostic';
+  const testIdParam = searchParams.get('test_id');
+  const sectionIdParam = searchParams.get('section_id');
+
   const [availableTests, setAvailableTests] = useState<PracticeTest[]>([]);
-  const [selectedTestId, setSelectedTestId] = useState(testIdParam);
+  const [sections, setSections] = useState<ExamSection[]>([]);
+  const [selectedSectionId, setSelectedSectionId] = useState<string>(sectionIdParam || 'ALL');
+  const [selectedTestId, setSelectedTestId] = useState<string>('');
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty | 'ALL'>('ALL');
   const [questionCount, setQuestionCount] = useState<number>(10);
 
@@ -40,20 +45,41 @@ export const PracticeSession: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Load available tests
+  // Load available tests and sections dynamically based on active tenant and exam
   useEffect(() => {
-    examService
-      .getPracticeTests(currentTenant?.id)
-      .then((tests) => {
+    let isMounted = true;
+    setLoading(true);
+
+    const testPromise = examService.getPracticeTests(
+      currentTenant?.id,
+      activeExam?.id,
+      selectedSectionId !== 'ALL' ? selectedSectionId : undefined
+    );
+    const sectionsPromise = activeExam?.id ? examService.getSections(activeExam.id) : Promise.resolve([]);
+
+    Promise.all([testPromise, sectionsPromise])
+      .then(([tests, secList]) => {
+        if (!isMounted) return;
         setAvailableTests(tests);
+        setSections(secList);
+
         if (testIdParam && tests.some((t) => t.id === testIdParam)) {
           setSelectedTestId(testIdParam);
-        } else if (tests[0]) {
+        } else if (tests.length > 0) {
           setSelectedTestId(tests[0].id);
+        } else {
+          setSelectedTestId('');
         }
       })
-      .finally(() => setLoading(false));
-  }, [currentTenant?.id, testIdParam]);
+      .catch((err) => console.error('Failed to load practice tests or sections:', err))
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentTenant?.id, activeExam?.id, selectedSectionId, testIdParam]);
 
   // Restore existing in-progress attempt if stored in sessionStorage
   useEffect(() => {
@@ -109,12 +135,13 @@ export const PracticeSession: React.FC = () => {
 
   // Launch Test Session via Authoritative Server Endpoint
   const handleStartSession = async () => {
+    if (!selectedTestId) return;
     setLoading(true);
     try {
       const resp = await attemptService.startTest({
         practice_test_id: selectedTestId,
         user_id: user.id,
-        tenant_id: currentTenant?.id || 'a0000000-0000-0000-0000-000000000001',
+        tenant_id: currentTenant?.id || '',
         difficulty: selectedDifficulty,
         question_count: questionCount,
       });
@@ -135,7 +162,7 @@ export const PracticeSession: React.FC = () => {
     }
   };
 
-  // UX Requirement 33: [ Check Answer ] authoritatively graded on server before moving forward
+  // UX Requirement: [ Check Answer ] authoritatively graded on server before moving forward
   const handleCheckCurrentAnswer = async () => {
     if (!attemptId || !currentQuestion) return;
     const selectedOption = userSelections[currentQuestion.id];
@@ -203,49 +230,102 @@ export const PracticeSession: React.FC = () => {
         <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
           <div className="border-b border-slate-100 pb-4">
             <div className="text-xs font-bold uppercase tracking-wider text-teal-700 mb-1">
-              Practice Drills • Interactive Mode
+              Practice Drills • {activeExam?.name || currentTenant?.name}
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
               Start Practice Session
             </h1>
             <p className="text-xs text-slate-500 mt-1">
-              Practice mode allows checking each answer step-by-step with verified mathematical explanations.
+              Interactive practice mode with step-by-step verification, instant grading, and verified solutions.
             </p>
           </div>
+
+          {/* Section Filter if sections exist */}
+          {sections.length > 0 && (
+            <div className="space-y-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                Filter by Section:
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedSectionId('ALL')}
+                  className={`py-1.5 px-3 rounded-lg text-xs font-semibold border transition-colors ${
+                    selectedSectionId === 'ALL'
+                      ? 'bg-teal-700 text-white border-teal-700'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  All Sections
+                </button>
+                {sections.map((sec) => (
+                  <button
+                    key={sec.id}
+                    type="button"
+                    onClick={() => setSelectedSectionId(sec.id)}
+                    className={`py-1.5 px-3 rounded-lg text-xs font-semibold border transition-colors ${
+                      selectedSectionId === sec.id
+                        ? 'bg-teal-700 text-white border-teal-700'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {sec.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Test Selector */}
           <div className="space-y-2">
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
               Select Drill or Module:
             </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {availableTests.map((t) => (
-                <div
-                  key={t.id}
-                  onClick={() => setSelectedTestId(t.id)}
-                  className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                    selectedTestId === t.id
-                      ? 'border-teal-600 bg-teal-50/40 ring-2 ring-teal-500/20'
-                      : 'border-slate-200 hover:border-slate-300'
-                  }`}
+
+            {loading ? (
+              <div className="py-12 text-center text-xs text-slate-400">Loading practice drills...</div>
+            ) : availableTests.length === 0 ? (
+              <div className="p-6 rounded-xl border border-dashed border-slate-300 text-center space-y-2">
+                <p className="text-xs text-slate-500">
+                  No practice drills currently available for {activeExam?.name || 'this exam'}.
+                </p>
+                <Link
+                  to={`${studentPortalPath}/study-plan`}
+                  className="inline-block text-xs font-bold text-teal-700 hover:underline"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-slate-900 text-sm">{t.name}</span>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 uppercase">
-                      {t.difficulty}
-                    </span>
+                  Review Curriculum Study Plan
+                </Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {availableTests.map((t) => (
+                  <div
+                    key={t.id}
+                    onClick={() => setSelectedTestId(t.id)}
+                    className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                      selectedTestId === t.id
+                        ? 'border-teal-600 bg-teal-50/40 ring-2 ring-teal-500/20'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-slate-900 text-sm">{t.name}</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 uppercase">
+                        {t.difficulty}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">{t.description}</p>
+                    <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-3">
+                      <span>{t.question_count} Questions</span>
+                      <span>•</span>
+                      <span>{t.time_limit_minutes} Mins</span>
+                      <span>•</span>
+                      <span className="capitalize">{t.question_selection_mode.toLowerCase()} Pool</span>
+                    </div>
                   </div>
-                  <p className="text-xs text-slate-500 mt-1 line-clamp-2">{t.description}</p>
-                  <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-3">
-                    <span>{t.question_count} Questions</span>
-                    <span>•</span>
-                    <span>{t.time_limit_minutes} Mins</span>
-                    <span>•</span>
-                    <span className="capitalize">{t.question_selection_mode}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Difficulty Filter */}
@@ -271,19 +351,19 @@ export const PracticeSession: React.FC = () => {
             </div>
           </div>
 
-          {/* Entitlement Notice based on Access Tier (dMATHub rules) */}
+          {/* Generic Entitlement Notice based on Access Tier */}
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1.5">
             <div className="flex items-center gap-2 font-bold text-slate-900">
               <Sparkles className="w-4 h-4 text-teal-600" />
-              <span>Current Entitlement: {tier}</span>
+              <span>Current Entitlement: {tier} Candidate</span>
             </div>
             <p className="text-slate-600 leading-relaxed">
               {tier === 'GUEST' &&
-                'As a Guest, you have access to the verified 10-question fixed pool. Filter options above filter this fixed set deterministically.'}
+                'As a Guest Candidate, you have access to fixed diagnostic drill questions with instant validation.'}
               {tier === 'REGISTERED' &&
-                'As a Registered Member, you have unlocked the 20-question verified pool with persistent attempt tracking and performance history.'}
+                'As a Registered Candidate, you have unlocked the full verified question bank with persistent attempt tracking and performance history.'}
               {tier === 'PAID' &&
-                'Pro tier unlocked: Infinite deterministic 4x4 matrix questions generated and validated on-the-fly.'}
+                'Pro Candidate: Unlimited procedural and algorithmic question generation active across all modules.'}
             </p>
           </div>
 
@@ -292,9 +372,9 @@ export const PracticeSession: React.FC = () => {
             <button
               type="button"
               id="btn-start-practice-session"
-              disabled={loading}
+              disabled={loading || availableTests.length === 0}
               onClick={handleStartSession}
-              className="px-6 py-3 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-sm shadow-md transition-all flex items-center gap-2"
+              className="px-6 py-3 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-40 text-white font-bold text-sm shadow-md transition-all flex items-center gap-2 cursor-pointer"
             >
               <span>Begin Practice Drill</span>
               <ArrowRight className="w-4 h-4" />
@@ -400,9 +480,7 @@ export const PracticeSession: React.FC = () => {
             disabled={isChecked}
           />
 
-          {/* Action Row adhering strictly to Section 33 Question UX:
-              [ Check Answer ] -> Correct/Incorrect + Solution -> [ Next Question ]
-          */}
+          {/* Action Row */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-4">
             <button
               type="button"
@@ -430,7 +508,7 @@ export const PracticeSession: React.FC = () => {
                   type="button"
                   id="btn-submit-final"
                   onClick={handleFinishTest}
-                  className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5"
+                  className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <span>Submit & View Results</span>
                   <ArrowRight className="w-4 h-4" />
@@ -440,7 +518,7 @@ export const PracticeSession: React.FC = () => {
                   type="button"
                   id="btn-next-question"
                   onClick={() => setCurrentIndex((prev) => Math.min(questions.length - 1, prev + 1))}
-                  className="px-6 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5"
+                  className="px-6 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <span>Next Question</span>
                   <ArrowRight className="w-4 h-4" />

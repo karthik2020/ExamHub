@@ -1,10 +1,18 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Sanitize Supabase URL from environment variable (handles raw code snippets or standard URLs)
-export function getSanitizedSupabaseUrl(): string {
-  const raw = process.env.SUPABASE_URL || '';
+// Retrieve remote Supabase Cloud endpoint
+export function getRemoteSupabaseUrl(): string {
+  const raw = process.env.SUPABASE_REMOTE_URL || process.env.SUPABASE_URL || '';
   const match = raw.match(/https:\/\/[a-z0-9-]+\.supabase\.co/i);
-  return match ? match[0] : raw.trim();
+  return match ? match[0] : 'https://bxeyafzvqncqggfehlge.supabase.co';
+}
+
+// Sanitize Supabase URL: defaults to local hardened gateway (port 3000) for client/test requests
+export function getSanitizedSupabaseUrl(): string {
+  if (process.env.SUPABASE_DIRECT_REMOTE === 'true') {
+    return getRemoteSupabaseUrl();
+  }
+  return 'http://localhost:3000';
 }
 
 // Robust sanitization of API keys (extracts JWT if user pasted JS assignment or quotes)
@@ -61,9 +69,9 @@ export function inspectJwtRole(token: string): string | null {
   }
 }
 
-// Server-side Supabase client with public anon key
+// Server-side Supabase client with public anon key (talks directly to remote database)
 export function getSupabaseClient(): SupabaseClient | null {
-  const url = getSanitizedSupabaseUrl();
+  const url = getRemoteSupabaseUrl();
   const key = getSupabaseAnonKey();
   if (!url || !key) return null;
   return createClient(url, key);
@@ -71,7 +79,7 @@ export function getSupabaseClient(): SupabaseClient | null {
 
 // Server-side Supabase admin client (requires valid service_role key)
 export function getSupabaseAdminClient(): SupabaseClient | null {
-  const url = getSanitizedSupabaseUrl();
+  const url = getRemoteSupabaseUrl();
   const key = getSupabaseServiceKey();
   if (!url || !key) return null;
   // If the key is a valid JWT or string, initialize client
@@ -80,7 +88,7 @@ export function getSupabaseAdminClient(): SupabaseClient | null {
 
 // User-scoped Supabase client that forwards authenticated student's JWT token
 export function getSupabaseUserClient(token: string): SupabaseClient | null {
-  const url = getSanitizedSupabaseUrl();
+  const url = getRemoteSupabaseUrl();
   const key = getSupabaseAnonKey();
   if (!url || !key || !token) return null;
   return createClient(url, key, {
@@ -94,8 +102,8 @@ export function getSupabaseUserClient(token: string): SupabaseClient | null {
 
 // Determine best client for a given request:
 // 1. User client if JWT Authorization header is provided
-// 2. Admin client if privileged operations / service role key is available
-// 3. Anon client as standard default
+// 2. Anon client as standard default for unauthenticated access
+// NEVER implicitly grant service_role privileges when authHeader is absent!
 export function getDbClient(authHeader?: string): SupabaseClient {
   const token = authHeader?.replace(/^Bearer\s+/i, '').trim();
   if (token && token.startsWith('ey')) {
@@ -103,14 +111,8 @@ export function getDbClient(authHeader?: string): SupabaseClient {
     if (userClient) return userClient;
   }
 
-  // Check if admin client with valid service role is available
-  const serviceKey = getSupabaseServiceKey();
-  const serviceRole = inspectJwtRole(serviceKey);
-  if (serviceRole === 'service_role') {
-    const adminClient = getSupabaseAdminClient();
-    if (adminClient) return adminClient;
-  }
-
+  // Without a valid user JWT, return the restricted anonymous client.
+  // Privileged service-role operations must explicitly use getSupabaseAdminClient().
   const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase client is not configured. Please check SUPABASE_URL and SUPABASE_KEY.');

@@ -3,34 +3,68 @@ import { Link, useParams } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
+  ArrowRight,
   Award,
+  BarChart2,
   CheckCircle2,
   Clock,
+  HelpCircle,
   RotateCcw,
   Sparkles,
+  Target,
   XCircle,
 } from 'lucide-react';
 import { QuestionRenderer } from '../../components/questions/QuestionRenderer';
 import { useTenant } from '../../contexts/TenantContext';
 import { attemptService } from '../../services/attemptService';
-import { Attempt } from '../../types';
+import { examService } from '../../services/examService';
+import { Attempt, ExamSection } from '../../types';
+
+interface SectionPerformance {
+  id: string;
+  name: string;
+  total: number;
+  correct: number;
+  accuracy: number;
+}
 
 export const AttemptResults: React.FC = () => {
   const { attemptId } = useParams<{ attemptId: string }>();
-  const { studentPortalPath } = useTenant();
+  const { studentPortalPath, activeExam, currentTenant } = useTenant();
 
   const [attempt, setAttempt] = useState<Attempt | null>(null);
+  const [sections, setSections] = useState<ExamSection[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'ALL' | 'INCORRECT' | 'CORRECT'>('ALL');
 
   useEffect(() => {
     if (!attemptId) return;
-    attemptService
-      .getAttempt(attemptId)
-      .then((data) => setAttempt(data))
-      .catch((err) => console.error('Error fetching attempt:', err))
-      .finally(() => setLoading(false));
-  }, [attemptId]);
+    let isMounted = true;
+    setLoading(true);
+
+    const loadData = async () => {
+      try {
+        const att = await attemptService.getAttempt(attemptId);
+        if (!isMounted) return;
+        setAttempt(att);
+
+        if (activeExam?.id) {
+          const secList = await examService.getSections(activeExam.id).catch(() => [] as ExamSection[]);
+          if (isMounted) setSections(secList);
+        }
+      } catch (err) {
+        console.error('Error fetching attempt results:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [attemptId, activeExam?.id]);
 
   if (loading) {
     return (
@@ -52,8 +86,43 @@ export const AttemptResults: React.FC = () => {
     );
   }
 
-  const isPassed = attempt.percentage >= 70;
+  const passingThreshold = activeExam?.passing_score || 65;
+  const isPassed = (attempt.percentage || 0) >= passingThreshold;
   const questions = attempt.questions || [];
+  const totalQuestions = questions.length || attempt.correct_count + attempt.incorrect_count + attempt.skipped_count;
+
+  // Compute Section or Question-Type Breakdown
+  const sectionMap = new Map<string, ExamSection>();
+  sections.forEach((s) => sectionMap.set(s.id, s));
+
+  const breakdownStats: Record<string, { name: string; total: number; correct: number; id: string }> = {};
+
+  questions.forEach((q) => {
+    const secId = q.section_id || 'general';
+    const secName = sectionMap.get(secId)?.name || q.question_type?.replace('_', ' ') || 'General Section';
+
+    if (!breakdownStats[secId]) {
+      breakdownStats[secId] = { id: secId, name: secName, total: 0, correct: 0 };
+    }
+    breakdownStats[secId].total += 1;
+    if (attempt.answers?.[q.id]?.is_correct) {
+      breakdownStats[secId].correct += 1;
+    }
+  });
+
+  const sectionPerformances: SectionPerformance[] = Object.values(breakdownStats).map((b) => ({
+    id: b.id,
+    name: b.name,
+    total: b.total,
+    correct: b.correct,
+    accuracy: b.total > 0 ? Math.round((b.correct / b.total) * 100) : 0,
+  }));
+
+  // Identify Weakest Section
+  const weakestSection =
+    sectionPerformances.length > 0
+      ? [...sectionPerformances].sort((a, b) => a.accuracy - b.accuracy)[0]
+      : null;
 
   const filteredQuestions = questions.filter((q) => {
     const ans = attempt.answers?.[q.id];
@@ -69,14 +138,14 @@ export const AttemptResults: React.FC = () => {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
           <div>
             <div className="text-xs font-bold uppercase tracking-wider text-teal-700 mb-1">
-              Assessment Report
+              Assessment Report • {activeExam?.name || currentTenant?.name}
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {attempt.test_name || 'Practice Drill Results'}
+              {attempt.practice_test_name || 'Practice Drill Results'}
             </h1>
             <p className="text-xs text-slate-500 mt-1">
-              Completed on {new Date(attempt.completed_at || Date.now()).toLocaleDateString()} at{' '}
-              {new Date(attempt.completed_at || Date.now()).toLocaleTimeString()}
+              Completed on {new Date(attempt.submitted_at || attempt.started_at || Date.now()).toLocaleDateString()} at{' '}
+              {new Date(attempt.submitted_at || attempt.started_at || Date.now()).toLocaleTimeString()}
             </p>
           </div>
 
@@ -86,7 +155,11 @@ export const AttemptResults: React.FC = () => {
             }`}
           >
             {isPassed ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-            <span>{isPassed ? 'Qualified / Target Met' : 'Review Required'}</span>
+            <span>
+              {isPassed
+                ? `Passed (>= ${passingThreshold}%)`
+                : `Review Recommended (< ${passingThreshold}%)`}
+            </span>
           </div>
         </div>
 
@@ -95,7 +168,7 @@ export const AttemptResults: React.FC = () => {
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center">
             <span className="text-xs font-semibold text-slate-500 uppercase">Score</span>
             <div className="text-3xl font-black text-slate-900 mt-1">
-              {attempt.score} / {attempt.total_questions}
+              {attempt.score} / {attempt.max_score || totalQuestions}
             </div>
           </div>
 
@@ -117,8 +190,87 @@ export const AttemptResults: React.FC = () => {
           </div>
         </div>
 
+        {/* Section / Dimension Breakdown if multiple sections/types exist */}
+        {sectionPerformances.length > 0 && (
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+              <span className="flex items-center gap-1.5">
+                <BarChart2 className="w-4 h-4 text-teal-700" />
+                Performance by Module
+              </span>
+              <span className="text-slate-400">{sectionPerformances.length} Dimensions Tested</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {sectionPerformances.map((perf) => (
+                <div
+                  key={perf.id}
+                  className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 flex flex-col justify-between gap-2"
+                >
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                    <span className="truncate">{perf.name}</span>
+                    <span className="text-teal-700">{perf.accuracy}%</span>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${
+                        perf.accuracy >= passingThreshold ? 'bg-emerald-600' : 'bg-amber-500'
+                      }`}
+                      style={{ width: `${perf.accuracy}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <span>
+                      {perf.correct} of {perf.total} correct
+                    </span>
+                    {perf.id !== 'general' && (
+                      <Link
+                        to={`${studentPortalPath}/practice?section_id=${perf.id}`}
+                        className="text-teal-700 font-bold hover:underline"
+                      >
+                        Drill
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Dynamic Recommendations Callout */}
+        {weakestSection && weakestSection.accuracy < 100 && (
+          <div className="p-4 rounded-xl bg-teal-50/70 border border-teal-200 text-xs text-teal-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="font-bold flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-teal-700" />
+                <span>Targeted Improvement Recommendation:</span>
+              </div>
+              <p className="text-teal-800 text-[11px]">
+                Focus your next practice drill on <strong>{weakestSection.name}</strong> where accuracy was{' '}
+                {weakestSection.accuracy}%.
+              </p>
+            </div>
+            {weakestSection.id !== 'general' ? (
+              <Link
+                to={`${studentPortalPath}/practice?section_id=${weakestSection.id}`}
+                className="px-3.5 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs whitespace-nowrap transition-colors"
+              >
+                Practice This Module
+              </Link>
+            ) : (
+              <Link
+                to={`${studentPortalPath}/practice`}
+                className="px-3.5 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs whitespace-nowrap transition-colors"
+              >
+                Practice Drill
+              </Link>
+            )}
+          </div>
+        )}
+
         {/* Action CTA Buttons */}
-        <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+        <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-100">
           <Link
             to={studentPortalPath}
             className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1.5"

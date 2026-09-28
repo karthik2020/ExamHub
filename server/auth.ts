@@ -81,15 +81,31 @@ export async function syncUserAndTenant(
       resolvedStudentPath = tenantRow.student_path || '/ems';
     }
   } else {
-    const { data: defaultTenant } = await adminClient
-      .from('tenants')
-      .select('id, slug, student_path')
-      .eq('slug', 'dmathub')
+    // Check if user already has an existing membership in tenant_users
+    const { data: userTenantMembership } = await adminClient
+      .from('tenant_users')
+      .select('tenant_id, tenants(id, slug, student_path)')
+      .eq('user_id', authUser.id)
+      .order('joined_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
-    if (defaultTenant) {
-      resolvedTenantId = defaultTenant.id;
-      resolvedTenantSlug = defaultTenant.slug;
-      resolvedStudentPath = defaultTenant.student_path || '/ems';
+
+    if (userTenantMembership?.tenants) {
+      const t = userTenantMembership.tenants as any;
+      resolvedTenantId = t.id;
+      resolvedTenantSlug = t.slug;
+      resolvedStudentPath = t.student_path || '/ems';
+    } else {
+      const { data: defaultTenant } = await adminClient
+        .from('tenants')
+        .select('id, slug, student_path')
+        .eq('slug', 'dmathub')
+        .maybeSingle();
+      if (defaultTenant) {
+        resolvedTenantId = defaultTenant.id;
+        resolvedTenantSlug = defaultTenant.slug;
+        resolvedStudentPath = defaultTenant.student_path || '/ems';
+      }
     }
   }
 
@@ -157,6 +173,25 @@ export async function syncUserAndTenant(
   } else {
     role = (existingMembership.role as Role) || 'STUDENT';
     tier = (existingMembership.tier as UserTier) || 'REGISTERED';
+  }
+
+  // 4. Resolve Authoritative User Tier from PostgreSQL subscriptions
+  const { data: activeSub } = await adminClient
+    .from('subscriptions')
+    .select('id, status, expires_at, plans(name, price)')
+    .eq('tenant_id', resolvedTenantId)
+    .eq('user_id', authUser.id)
+    .eq('status', 'ACTIVE')
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (activeSub && (!activeSub.expires_at || new Date(activeSub.expires_at).getTime() > Date.now())) {
+    tier = 'PAID';
+  } else if (authUser.user_metadata?.tier === 'PAID') {
+    tier = 'PAID';
+  } else {
+    tier = 'REGISTERED';
   }
 
   return {

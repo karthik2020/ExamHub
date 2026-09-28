@@ -3,12 +3,15 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   Activity,
   ArrowRight,
+  BookOpen,
+  Building2,
   Cpu,
   Database,
   Eye,
   FileQuestion,
   GraduationCap,
   Home,
+  Layers,
   LogIn,
   LogOut,
   Palette,
@@ -21,7 +24,16 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTenant } from '../../contexts/TenantContext';
 
 export const AdminLayout: React.FC = () => {
-  const { currentTenant, studentPortalPath } = useTenant();
+  const {
+    currentTenant,
+    availableTenants,
+    switchTenant,
+    exams,
+    activeExam,
+    activeExamId,
+    setActiveExamId,
+    studentPortalPath,
+  } = useTenant();
   const { user, role, authMode, isAuthenticated, switchDemoProfile, setLoginModalOpen } = useAuth();
   const location = useLocation();
 
@@ -31,6 +43,7 @@ export const AdminLayout: React.FC = () => {
     { label: 'Overview', path: '/admin', icon: Home },
     { label: 'Tenant Branding', path: '/admin/branding', icon: Palette },
     { label: 'Question Bank', path: '/admin/questions', icon: FileQuestion },
+    { label: 'Curriculum & Tests', path: '/admin/tests', icon: BookOpen },
     { label: 'Generator Workbench', path: '/admin/generator', icon: Cpu },
     { label: 'User RBAC & Tiers', path: '/admin/users', icon: Users },
     { label: 'Audit Logs', path: '/admin/audit-logs', icon: Activity },
@@ -39,7 +52,7 @@ export const AdminLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
       <div className="border-b border-slate-800 bg-slate-950/80 px-4 sm:px-6 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <span className="p-1.5 rounded-lg bg-teal-500/20 text-teal-400 border border-teal-500/40">
               <ShieldCheck className="w-5 h-5" />
@@ -47,9 +60,6 @@ export const AdminLayout: React.FC = () => {
             <div>
               <div className="font-black text-sm text-white flex items-center gap-2">
                 <span>ExamHub Proctor Admin</span>
-                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                  {currentTenant?.slug}
-                </span>
                 {isAdmin && (
                   <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-teal-500/20 text-teal-300 border border-teal-500/40">
                     {isAuthenticated ? 'Authenticated Admin' : 'Demo Super Admin'}
@@ -90,6 +100,67 @@ export const AdminLayout: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Shared Admin Context Bar: Active Tenant & Active Exam Selectors */}
+      {isAdmin && (
+        <div className="bg-slate-950/95 border-b border-slate-800/80 px-4 sm:px-6 py-2.5">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4 text-xs">
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+              {/* Tenant Selection */}
+              <div className="flex items-center gap-2">
+                <Building2 className="w-3.5 h-3.5 text-teal-400" />
+                <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider">Tenant:</span>
+                <select
+                  id="admin-tenant-selector"
+                  value={currentTenant?.slug || ''}
+                  onChange={(e) => switchTenant(e.target.value)}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white font-medium focus:outline-hidden focus:ring-1 focus:ring-teal-500 cursor-pointer"
+                >
+                  {availableTenants.map((t) => (
+                    <option key={t.id} value={t.slug}>
+                      {t.name} ({t.slug})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Exam Selection */}
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-3.5 h-3.5 text-sky-400" />
+                <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider">Active Exam:</span>
+                {exams.length > 0 ? (
+                  <select
+                    id="admin-exam-selector"
+                    value={activeExamId || ''}
+                    onChange={(e) => setActiveExamId(e.target.value)}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white font-medium focus:outline-hidden focus:ring-1 focus:ring-sky-500 cursor-pointer max-w-xs truncate"
+                  >
+                    {exams.map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.name} ({e.slug})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20 font-medium">
+                    No Exams Configured
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Context Badge */}
+            <div className="hidden lg:flex items-center gap-2 text-[11px] text-slate-400">
+              <span className="text-slate-500">Scope:</span>
+              <span className="font-mono text-teal-300 font-semibold">{currentTenant?.name}</span>
+              <span>/</span>
+              <span className="font-mono text-sky-300 font-semibold">
+                {activeExam ? activeExam.name : 'No Exam Selected'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 flex max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 gap-6">
         {isAdmin ? (

@@ -20,10 +20,11 @@ export const examService = {
     return apiFetch<Topic[]>(`/api/topics${q}`);
   },
 
-  async getPracticeTests(tenantId?: string, examId?: string): Promise<PracticeTest[]> {
+  async getPracticeTests(tenantId?: string, examId?: string, sectionId?: string): Promise<PracticeTest[]> {
     const params = new URLSearchParams();
     if (tenantId) params.append('tenant_id', tenantId);
     if (examId) params.append('exam_id', examId);
+    if (sectionId) params.append('section_id', sectionId);
     return apiFetch<PracticeTest[]>(`/api/practice-tests?${params.toString()}`);
   },
 

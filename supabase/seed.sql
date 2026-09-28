@@ -80,7 +80,10 @@ INSERT INTO topics (id, section_id, name, slug, description, display_order) VALU
 ('c0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'Single Element Motion & Bounce', 'single-motion-bounce', 'Linear translation and border reflection of symbols in 4x4 grids.', 1),
 ('c0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001', 'Rotational Symmetry & Inversion', 'rotational-symmetry', 'Quarter and half turn transformations paired with fill toggles.', 2),
 ('c0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000001', 'Multi-Symbol Interacting Sequences', 'multi-symbol-interaction', 'Multiple objects with counter-directional vectors and collision rules.', 3),
-('c0000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000002', 'Modular Equations & Operators', 'modular-equations', 'Modular arithmetic and unknown algebraic systems.', 4)
+('c0000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000002', 'Modular Equations & Operators', 'modular-equations', 'Modular arithmetic and unknown algebraic systems.', 1),
+('c0000000-0000-0000-0000-000000000005', 'b0000000-0000-0000-0000-000000000003', 'Latin Square Matrix Deduction', 'latin-square-deduction', 'Row and column uniqueness constraints in symbolic Latin squares.', 1),
+('c0000000-0000-0000-0000-000000000006', 'b0000000-0000-0000-0000-000000000004', 'Academic Text Inference', 'academic-text-inference', 'Logical inference and conclusion deduction from academic text.', 1),
+('c0000000-0000-0000-0000-000000000007', 'b0000000-0000-0000-0000-000000000004', 'Scientific Data & Chart Interpretation', 'scientific-data-interpretation', 'Evaluating experimental charts, trend graphs, and data tables.', 2)
 ON CONFLICT (section_id, slug) DO NOTHING;
 
 -- 7. SEED QUESTION GENERATOR
@@ -96,22 +99,81 @@ INSERT INTO question_generators (
     'ACTIVE'
 ) ON CONFLICT DO NOTHING;
 
--- 8. PRACTICE TEST
+-- 8. PRACTICE TESTS & MOCK EXAMS
 INSERT INTO practice_tests (
-    id, tenant_id, exam_id, section_id, name, description, test_type, difficulty, question_count, time_limit_minutes, is_published
-) VALUES (
+    id, tenant_id, exam_id, section_id, name, description, test_type, difficulty, question_selection_mode, question_count, time_limit_minutes, is_published
+) VALUES 
+(
     'e2000000-0000-0000-0000-000000000001',
     'a0000000-0000-0000-0000-000000000001',
     'e0000000-0000-0000-0000-000000000001',
     'b0000000-0000-0000-0000-000000000001',
-    'dMAT Diagnostic Figure Sequence Drill',
+    'dMAT Diagnostic Figure Sequence Assessment',
     'Official diagnostic assessment targeting 4x4 matrix figure progression rules.',
     'PRACTICE',
     'MEDIUM',
+    'FIXED',
     10,
     15,
     true
-) ON CONFLICT DO NOTHING;
+),
+(
+    'e2000000-0000-0000-0000-000000000002',
+    'a0000000-0000-0000-0000-000000000001',
+    'e0000000-0000-0000-0000-000000000001',
+    'b0000000-0000-0000-0000-000000000001',
+    'Figure Sequences — High-Yield Practice Drill',
+    'Curated 20-question practice drill spanning translation, rotational symmetry, and multi-symbol interactions.',
+    'PRACTICE',
+    'MEDIUM',
+    'FIXED',
+    20,
+    25,
+    true
+),
+(
+    'e2000000-0000-0000-0000-000000000003',
+    'a0000000-0000-0000-0000-000000000001',
+    'e0000000-0000-0000-0000-000000000001',
+    'b0000000-0000-0000-0000-000000000001',
+    'Figure Sequences — Unlimited Procedural Drill',
+    'Live algorithmic question generation delivering limitless 4x4 matrix transformation sequences.',
+    'PRACTICE',
+    'MEDIUM',
+    'GENERATED',
+    10,
+    15,
+    true
+),
+(
+    'e2000000-0000-0000-0000-000000000004',
+    'a0000000-0000-0000-0000-000000000001',
+    'e0000000-0000-0000-0000-000000000001',
+    'b0000000-0000-0000-0000-000000000002',
+    'Mathematical Equations & Logic Drill',
+    'Focused drill on modular arithmetic, operator deductions, and simultaneous equations.',
+    'PRACTICE',
+    'MEDIUM',
+    'FIXED',
+    3,
+    10,
+    true
+),
+(
+    'e2000000-0000-0000-0000-000000000005',
+    'a0000000-0000-0000-0000-000000000001',
+    'e0000000-0000-0000-0000-000000000001',
+    NULL,
+    'dMAT Full-Length Simulation Mock Exam',
+    'Standardized 25-question timed simulation across Figure Sequences, Mathematical Equations, Latin Squares, and Academic Reasoning under strict 45-minute exam conditions.',
+    'MOCK',
+    'MEDIUM',
+    'FIXED',
+    25,
+    45,
+    true
+)
+ON CONFLICT (id) DO NOTHING;
 
 -- 9. QUESTIONS & OPTIONS
 

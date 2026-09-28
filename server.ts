@@ -1,8 +1,16 @@
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { verifySupabaseConnection, getSupabaseAdminClient } from './server/supabase';
+import {
+  verifySupabaseConnection,
+  getSupabaseAdminClient,
+  getDbClient,
+  getRemoteSupabaseUrl,
+  getSupabaseAnonKey,
+  inspectJwtRole,
+} from './server/supabase';
 import { generateFigureSequence } from './src/generator/figureSequenceEngine';
+import { resolveUserEntitlement } from './src/types/entitlements';
 import { tenantService } from './server/services/tenantService';
 import { cmsService } from './server/services/cmsService';
 import { examService } from './server/services/examService';
@@ -11,20 +19,203 @@ import { practiceTestService } from './server/services/practiceTestService';
 import { attemptService } from './server/services/attemptService';
 import { userService } from './server/services/userService';
 import { adminService } from './server/services/adminService';
+import { paymentService } from './server/services/paymentService';
 import { getAuthenticatedUser, syncUserAndTenant, requireAuth, requireAdmin } from './server/auth';
+import { GuestSessionManager } from './server/guestSession';
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 async function startServer() {
   const app = express();
+
+  // Webhook raw body parser mounted before express.json() to support HMAC-SHA256 verification
+  app.use('/api/webhooks', express.raw({ type: 'application/json' }));
   app.use(express.json());
 
   // Request logger
   app.use((req, res, next) => {
-    if (req.path.startsWith('/api')) {
+    if (req.path.startsWith('/api') || req.path.startsWith('/rest') || req.path.startsWith('/auth')) {
       console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     }
     next();
+  });
+
+  // Helper to forward requests directly to remote Supabase Cloud
+  async function forwardToSupabase(req: express.Request, res: express.Response) {
+    try {
+      const remoteBase = getRemoteSupabaseUrl();
+      const targetUrl = `${remoteBase}${req.originalUrl}`;
+
+      const headers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(req.headers)) {
+        if (v && typeof v === 'string') {
+          const lower = k.toLowerCase();
+          if (!['host', 'connection', 'content-length'].includes(lower)) {
+            headers[k] = v;
+          }
+        }
+      }
+      if (!headers['apikey']) {
+        headers['apikey'] = getSupabaseAnonKey();
+      }
+
+      const init: RequestInit = {
+        method: req.method,
+        headers,
+      };
+
+      if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body && Object.keys(req.body).length > 0) {
+        init.body = JSON.stringify(req.body);
+      }
+
+      const upstreamRes = await fetch(targetUrl, init);
+      res.status(upstreamRes.status);
+
+      for (const [k, v] of upstreamRes.headers.entries()) {
+        const lower = k.toLowerCase();
+        if (!['transfer-encoding', 'content-encoding', 'content-length'].includes(lower)) {
+          res.setHeader(k, v);
+        }
+      }
+
+      const text = await upstreamRes.text();
+      if (upstreamRes.status === 204 || !text) {
+        return res.status(upstreamRes.status).end();
+      }
+
+      const cType = upstreamRes.headers.get('content-type') || '';
+      if (cType.includes('application/json')) {
+        try {
+          return res.json(JSON.parse(text));
+        } catch {
+          return res.send(text);
+        }
+      }
+      return res.send(text);
+    } catch (err: any) {
+      console.error('Supabase Gateway Forwarding Error:', err);
+      return res.status(502).json({ error: 'Supabase Gateway Forwarding Error: ' + err.message });
+    }
+  }
+
+  // ==========================================
+  // SUPABASE AUTH PROXY GATEWAY
+  // ==========================================
+  app.all('/auth/v1*', async (req, res) => {
+    return forwardToSupabase(req, res);
+  });
+
+  // ==========================================
+  // SUPABASE POSTGREST HARDENED GATEWAY
+  // Least-privilege column restriction enforcement
+  // ==========================================
+  const PROHIBITED_ATTEMPT_UPDATE_FIELDS = [
+    'score',
+    'percentage',
+    'correct_count',
+    'incorrect_count',
+    'skipped_count',
+    'max_score',
+    'submitted_at',
+    'status',
+    'tenant_id',
+    'user_id',
+  ];
+
+  const PROHIBITED_ANSWER_UPDATE_FIELDS = [
+    'is_correct',
+    'marks_awarded',
+  ];
+
+  app.all('/rest/v1*', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace(/^Bearer\s+/i, '').trim();
+    const role = token ? inspectJwtRole(token) : 'anon';
+
+    // Service-role requests have full backend authority
+    if (role === 'service_role') {
+      return forwardToSupabase(req, res);
+    }
+
+    // Path analysis: /rest/v1/attempts or /rest/v1/attempt_answers
+    const cleanPath = req.path.replace(/^\/rest\/v1\/?/, '');
+    const table = cleanPath.split('/')[0]?.split('?')[0];
+
+    // Enforce least-privilege column update restrictions on authenticated student roles
+    if (['PATCH', 'PUT'].includes(req.method)) {
+      if (['subscriptions', 'payments', 'payment_events'].includes(table)) {
+        return res.status(403).json({
+          message: `permission denied for relation "${table}": client mutations strictly prohibited`,
+          code: '42501',
+          details: null,
+          hint: 'Commercial state mutations can only be executed via authoritative server webhooks',
+        });
+      }
+      if (table === 'attempts') {
+        const bodyKeys = Object.keys(req.body || {}).map((k) => k.toLowerCase());
+        const violatedCol = bodyKeys.find((k) => PROHIBITED_ATTEMPT_UPDATE_FIELDS.includes(k));
+        if (violatedCol) {
+          return res.status(403).json({
+            message: `permission denied for column "${violatedCol}" of relation "attempts"`,
+            code: '42501',
+            details: null,
+            hint: null,
+          });
+        }
+      } else if (table === 'attempt_answers') {
+        const bodyKeys = Object.keys(req.body || {}).map((k) => k.toLowerCase());
+        const violatedCol = bodyKeys.find((k) => PROHIBITED_ANSWER_UPDATE_FIELDS.includes(k));
+        if (violatedCol) {
+          return res.status(403).json({
+            message: `permission denied for column "${violatedCol}" of relation "attempt_answers"`,
+            code: '42501',
+            details: null,
+            hint: null,
+          });
+        }
+      }
+    } else if (req.method === 'POST') {
+      if (['subscriptions', 'payments', 'payment_events'].includes(table)) {
+        return res.status(403).json({
+          message: `permission denied for relation "${table}": direct client insertion strictly prohibited`,
+          code: '42501',
+          details: null,
+          hint: 'Commercial state mutations can only be executed via authoritative server webhooks',
+        });
+      }
+      if (table === 'attempts') {
+        const body = req.body || {};
+        if (body.score !== undefined || body.percentage !== undefined || body.status === 'SUBMITTED') {
+          return res.status(403).json({
+            message: 'new row violates row-level security policy for table "attempts"',
+            code: '42501',
+            details: null,
+            hint: null,
+          });
+        }
+      } else if (table === 'attempt_answers') {
+        const body = req.body || {};
+        if (body.is_correct !== undefined || body.marks_awarded !== undefined) {
+          return res.status(403).json({
+            message: 'new row violates row-level security policy for table "attempt_answers"',
+            code: '42501',
+            details: null,
+            hint: null,
+          });
+        }
+      }
+    } else if (req.method === 'DELETE') {
+      if (['subscriptions', 'payments', 'payment_events'].includes(table)) {
+        return res.status(403).json({
+          message: `permission denied for relation "${table}": client deletion strictly prohibited`,
+          code: '42501',
+          details: null,
+          hint: 'Commercial state mutations can only be executed via authoritative server webhooks',
+        });
+      }
+    }
+
+    return forwardToSupabase(req, res);
   });
 
   app.get('/api/health', (req, res) => {
@@ -59,8 +250,10 @@ async function startServer() {
 
       const tenantIdOrSlug =
         (req.query.tenant_id as string) ||
+        (req.query.tenant_slug as string) ||
         (req.headers['x-tenant-id'] as string) ||
-        'dmathub';
+        (req.headers['x-tenant-slug'] as string) ||
+        undefined;
 
       const profile = await syncUserAndTenant(authUser, tenantIdOrSlug);
 
@@ -82,7 +275,7 @@ async function startServer() {
   // Register a new user account with Supabase Auth
   app.post('/api/auth/register', async (req, res) => {
     try {
-      const { email, password, name, tenant_id } = req.body;
+      const { email, password, name, tenant_id, tenant_slug } = req.body;
 
       if (!email || !password) {
         return res.status(400).json({ error: 'Email and password are required' });
@@ -124,8 +317,9 @@ async function startServer() {
         return res.status(500).json({ error: 'Failed to create auth user' });
       }
 
+      const tenantKey = tenant_id || tenant_slug || (req.headers['x-tenant-id'] as string) || (req.headers['x-tenant-slug'] as string) || 'dmathub';
       // Sync into public.users and public.tenant_users
-      const profile = await syncUserAndTenant(newUser, tenant_id || 'dmathub');
+      const profile = await syncUserAndTenant(newUser, tenantKey);
 
       res.status(201).json({
         success: true,
@@ -251,7 +445,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/cms/pages/:slug', async (req, res) => {
+  app.put('/api/cms/pages/:slug', requireAdmin as any, async (req, res) => {
     try {
       const { slug } = req.params;
       const updated = await cmsService.updatePage(slug, req.body, req.headers.authorization);
@@ -295,7 +489,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/exams', async (req, res) => {
+  app.post('/api/exams', requireAdmin as any, async (req, res) => {
     try {
       const newExam = await examService.createExam(req.body, req.headers.authorization);
       res.status(201).json(newExam);
@@ -360,6 +554,7 @@ async function startServer() {
       let params = { ...req.body };
       const authHeader = req.headers.authorization;
       const { user: authUser } = await getAuthenticatedUser(authHeader);
+      const guestToken = GuestSessionManager.extractSessionToken(req);
 
       if (authUser) {
         // Derive user_id from verified JWT session - never trust unauthenticated client user_id
@@ -367,13 +562,25 @@ async function startServer() {
         const profile = await syncUserAndTenant(authUser, params.tenant_id);
         params.tenant_id = profile.tenant_id;
         params.user_tier = profile.tier;
+        params.user_role = profile.role;
+      } else {
+        // Unauthenticated guests must NOT be allowed to assign attempts to arbitrary user accounts or fake tiers!
+        delete params.user_id;
+        params.user_tier = 'GUEST';
+        params.user_role = 'STUDENT';
       }
 
-      const response = await attemptService.startAttempt(params, authHeader);
+      const response = await attemptService.startAttempt(params, authHeader, guestToken);
+
+      // Attach guest session token via cookie and response header if this was a guest attempt
+      if (response.guest_session_token) {
+        GuestSessionManager.attachSessionToken(res, response.guest_session_token);
+      }
+
       res.json(response);
     } catch (err: any) {
       console.error('Error starting attempt:', err.message);
-      res.status(500).json({ error: err.message });
+      res.status(err.statusCode || 500).json({ error: err.message, code: err.code });
     }
   });
 
@@ -381,12 +588,14 @@ async function startServer() {
   app.get('/api/attempts/:id', async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
-      const attempt = await attemptService.getAttemptById(req.params.id, authHeader);
+      const guestToken = GuestSessionManager.extractSessionToken(req);
+      const { user: authUser } = await getAuthenticatedUser(authHeader);
+
+      const attempt = await attemptService.getAttemptById(req.params.id, authHeader, guestToken);
       if (!attempt) {
         return res.status(404).json({ error: 'Attempt not found in PostgreSQL' });
       }
 
-      const { user: authUser } = await getAuthenticatedUser(authHeader);
       if (authUser) {
         const profile = await syncUserAndTenant(authUser);
         const isOwner = attempt.user_id === authUser.id;
@@ -398,7 +607,7 @@ async function startServer() {
 
       res.json(attempt);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
 
@@ -408,14 +617,7 @@ async function startServer() {
       const { id } = req.params;
       const { question_id, selected_option_key, time_spent_seconds } = req.body;
       const authHeader = req.headers.authorization;
-
-      const { user: authUser } = await getAuthenticatedUser(authHeader);
-      if (authUser) {
-        const attempt = await attemptService.getAttemptById(id, authHeader);
-        if (attempt && attempt.user_id !== authUser.id) {
-          return res.status(403).json({ error: 'Forbidden: Cannot submit answers for another student\'s attempt.' });
-        }
-      }
+      const guestToken = GuestSessionManager.extractSessionToken(req);
 
       const result = await attemptService.checkAnswer(
         {
@@ -424,11 +626,12 @@ async function startServer() {
           selected_option_key,
           time_spent_seconds,
         },
-        authHeader
+        authHeader,
+        guestToken
       );
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
 
@@ -438,14 +641,7 @@ async function startServer() {
       const { id } = req.params;
       const { question_id, selected_option_key, time_spent_seconds } = req.body;
       const authHeader = req.headers.authorization;
-
-      const { user: authUser } = await getAuthenticatedUser(authHeader);
-      if (authUser) {
-        const attempt = await attemptService.getAttemptById(id, authHeader);
-        if (attempt && attempt.user_id !== authUser.id) {
-          return res.status(403).json({ error: 'Forbidden: Cannot save answers for another student\'s attempt.' });
-        }
-      }
+      const guestToken = GuestSessionManager.extractSessionToken(req);
 
       const result = await attemptService.saveAnswer(
         {
@@ -454,11 +650,12 @@ async function startServer() {
           selected_option_key,
           time_spent_seconds,
         },
-        authHeader
+        authHeader,
+        guestToken
       );
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
 
@@ -467,19 +664,12 @@ async function startServer() {
     try {
       const { id } = req.params;
       const authHeader = req.headers.authorization;
+      const guestToken = GuestSessionManager.extractSessionToken(req);
 
-      const { user: authUser } = await getAuthenticatedUser(authHeader);
-      if (authUser) {
-        const attempt = await attemptService.getAttemptById(id, authHeader);
-        if (attempt && attempt.user_id !== authUser.id) {
-          return res.status(403).json({ error: 'Forbidden: Cannot submit another student\'s attempt.' });
-        }
-      }
-
-      const gradedAttempt = await attemptService.submitAttempt(id, authHeader);
+      const gradedAttempt = await attemptService.submitAttempt(id, authHeader, guestToken);
       res.json(gradedAttempt);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
 
@@ -487,20 +677,28 @@ async function startServer() {
     try {
       const { userId } = req.params;
       const authHeader = req.headers.authorization;
+      const guestToken = GuestSessionManager.extractSessionToken(req);
 
       const { user: authUser } = await getAuthenticatedUser(authHeader);
-      if (authUser && authUser.id !== userId) {
-        const profile = await syncUserAndTenant(authUser);
-        const isAdmin = profile.role === 'SUPER_ADMIN' || profile.role === 'TENANT_ADMIN';
-        if (!isAdmin) {
+      if (authUser) {
+        if (authUser.id !== userId) {
+          const profile = await syncUserAndTenant(authUser);
+          const isAdmin = profile.role === 'SUPER_ADMIN' || profile.role === 'TENANT_ADMIN';
+          if (!isAdmin) {
+            return res.status(403).json({ error: 'Forbidden: You cannot view another student\'s attempt history.' });
+          }
+        }
+      } else {
+        // Unauthenticated guest: strictly disallow querying any registered user's ID
+        if (userId !== '10000000-0000-0000-0000-000000000003') {
           return res.status(403).json({ error: 'Forbidden: You cannot view another student\'s attempt history.' });
         }
       }
 
-      const history = await attemptService.getUserAttempts(userId, authHeader);
+      const history = await attemptService.getUserAttempts(userId, authHeader, guestToken);
       res.json(history);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
 
@@ -533,7 +731,7 @@ async function startServer() {
 
   app.get('/api/admin/questions', requireAdmin as any, async (req, res) => {
     try {
-      const { tenant_id, exam_id, section_id, topic_id, difficulty, question_type, status } = req.query;
+      const { tenant_id, exam_id, section_id, topic_id, difficulty, question_type, status, limit, offset } = req.query;
       const questions = await questionService.getQuestions(
         {
           tenant_id: tenant_id as string | undefined,
@@ -543,6 +741,8 @@ async function startServer() {
           difficulty: difficulty as any,
           question_type: question_type as any,
           status: status as any,
+          limit: limit ? Number(limit) : undefined,
+          offset: offset ? Number(offset) : undefined,
         },
         req.headers.authorization
       );
@@ -614,6 +814,228 @@ async function startServer() {
       const tenantId = req.query.tenant_id as string | undefined;
       const plans = await tenantService.getPlans(tenantId, req.headers.authorization);
       res.json(plans);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Current user subscription & entitlement status
+  app.get('/api/subscriptions/current', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const { user: authUser } = await getAuthenticatedUser(authHeader);
+      const tenantId = (req.query.tenant_id as string) || undefined;
+      const adminClient = getSupabaseAdminClient() || getDbClient(authHeader);
+
+      let profile: any = null;
+      let activeSub: any = null;
+      let effectiveTier: any = 'GUEST';
+
+      if (authUser) {
+        profile = await syncUserAndTenant(authUser, tenantId);
+        effectiveTier = profile.tier;
+
+        const { data: subData } = await adminClient
+          .from('subscriptions')
+          .select('id, status, started_at, expires_at, plan_id, plans(id, name, description, price, currency, billing_interval, features)')
+          .eq('tenant_id', profile.tenant_id)
+          .eq('user_id', authUser.id)
+          .eq('status', 'ACTIVE')
+          .order('started_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        activeSub = subData;
+      }
+
+      const resolvedTenantId = profile?.tenant_id || tenantId || 'a0000000-0000-0000-0000-000000000001';
+      const plans = await tenantService.getPlans(resolvedTenantId, authHeader);
+      const entitlement = resolveUserEntitlement(effectiveTier, Boolean(authUser));
+
+      res.json({
+        tier: effectiveTier,
+        role: profile?.role || 'STUDENT',
+        isAuthenticated: Boolean(authUser),
+        subscription: activeSub,
+        entitlement,
+        plans,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ==========================================
+  // 7B. COMMERCIAL CHECKOUT & PAYMENT WEBHOOKS
+  // ==========================================
+  app.post('/api/checkout/create-session', requireAuth as any, async (req, res) => {
+    try {
+      const authUser = (req as any).user;
+      const tenantId = (req.query.tenant_id as string) || (req.headers['x-tenant-id'] as string) || 'a0000000-0000-0000-0000-000000000001';
+      const profile = await syncUserAndTenant(authUser, tenantId);
+
+      const { plan_id } = req.body || {};
+      if (!plan_id) {
+        return res.status(400).json({ error: 'plan_id is required' });
+      }
+
+      const session = await paymentService.createCheckoutSession(
+        authUser.id,
+        profile.tenant_id,
+        plan_id,
+        req.headers.authorization
+      );
+
+      res.json(session);
+    } catch (err: any) {
+      const status = err.message.includes('Forbidden') ? 403 : 400;
+      res.status(status).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/webhooks/payments', (req, res) => {
+    res.json({
+      status: 'active',
+      service: 'ExamHub Payment Webhook Listener',
+      provider: 'Paddle',
+      mode: 'sandbox',
+      supported_methods: ['POST'],
+      description: 'Authoritative payment webhook receiver for Paddle Billing events.',
+    });
+  });
+
+  app.post('/api/webhooks/payments', async (req, res) => {
+    try {
+      // Capture raw body string from buffer/string for cryptographic HMAC verification
+      const rawBody = Buffer.isBuffer(req.body)
+        ? req.body.toString('utf-8')
+        : typeof req.body === 'string'
+        ? req.body
+        : JSON.stringify(req.body);
+
+      const signature = (req.headers['paddle-signature'] as string) || (req.headers['Paddle-Signature'] as string);
+
+      const result = await paymentService.handleWebhook(rawBody, signature);
+      return res.status(result.statusCode).json(result.body);
+    } catch (err: any) {
+      console.error('[PaymentWebhook] Unhandled error:', err);
+      return res.status(500).json({ error: 'Internal webhook error: ' + err.message });
+    }
+  });
+
+  // Admin visibility endpoints for commercial state
+  app.get('/api/admin/subscriptions', requireAdmin as any, async (req, res) => {
+    try {
+      const tenantId = req.query.tenant_id as string | undefined;
+      const subs = await paymentService.getAdminSubscriptions(tenantId);
+      res.json(subs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/admin/payments', requireAdmin as any, async (req, res) => {
+    try {
+      const tenantId = req.query.tenant_id as string | undefined;
+      const payments = await paymentService.getAdminPayments(tenantId);
+      res.json(payments);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/admin/payment-events', requireAdmin as any, async (req, res) => {
+    try {
+      const tenantId = req.query.tenant_id as string | undefined;
+      const events = await paymentService.getAdminPaymentEvents(tenantId);
+      res.json(events);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Practice Test & Mock Exam Management
+  app.post('/api/admin/practice-tests', requireAdmin as any, async (req, res) => {
+    try {
+      const newTest = await practiceTestService.createPracticeTest(
+        req.body,
+        req.body.question_ids,
+        req.headers.authorization
+      );
+      await adminService.logAudit(
+        {
+          tenant_id: newTest.tenant_id,
+          action: 'PRACTICE_TEST_CREATED',
+          entity_type: 'PRACTICE_TEST',
+          entity_id: newTest.id,
+          new_data: { name: newTest.name, type: newTest.test_type, mode: newTest.question_selection_mode },
+        },
+        req.headers.authorization
+      );
+      res.status(201).json(newTest);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put('/api/admin/practice-tests/:id', requireAdmin as any, async (req, res) => {
+    try {
+      const updated = await practiceTestService.updatePracticeTest(
+        req.params.id,
+        req.body,
+        req.headers.authorization
+      );
+      await adminService.logAudit(
+        {
+          tenant_id: updated.tenant_id,
+          action: 'PRACTICE_TEST_UPDATED',
+          entity_type: 'PRACTICE_TEST',
+          entity_id: updated.id,
+          new_data: req.body,
+        },
+        req.headers.authorization
+      );
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/admin/practice-tests/:id', requireAdmin as any, async (req, res) => {
+    try {
+      const test = await practiceTestService.getPracticeTestById(req.params.id, req.headers.authorization);
+      const result = await practiceTestService.deletePracticeTest(req.params.id, req.headers.authorization);
+      if (test) {
+        await adminService.logAudit(
+          {
+            tenant_id: test.tenant_id,
+            action: 'PRACTICE_TEST_DELETED',
+            entity_type: 'PRACTICE_TEST',
+            entity_id: test.id,
+          },
+          req.headers.authorization
+        );
+      }
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Section & Topic Configuration
+  app.post('/api/admin/sections', requireAdmin as any, async (req, res) => {
+    try {
+      const section = await examService.createSection(req.body, req.headers.authorization);
+      res.status(201).json(section);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/admin/topics', requireAdmin as any, async (req, res) => {
+    try {
+      const topic = await examService.createTopic(req.body, req.headers.authorization);
+      res.status(201).json(topic);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, ShieldCheck } from 'lucide-react';
+import { useTenant } from '../../contexts/TenantContext';
 import { adminService } from '../../services/adminService';
 import { AuditLog } from '../../types';
 
 export const AuditLogsView: React.FC = () => {
+  const { currentTenant } = useTenant();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -12,7 +14,7 @@ export const AuditLogsView: React.FC = () => {
     setLoading(true);
     setError(null);
     adminService
-      .getAuditLogs()
+      .getAuditLogs(currentTenant?.id)
       .then((data) => {
         setLogs(data);
         setError(null);
@@ -25,7 +27,7 @@ export const AuditLogsView: React.FC = () => {
 
   useEffect(() => {
     fetchLogs();
-  }, []);
+  }, [currentTenant?.id]);
 
   return (
     <div className="space-y-6">

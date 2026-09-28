@@ -122,7 +122,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
       tier: 'GUEST',
       role: 'STUDENT',
       title: 'Guest Candidate',
-      description: 'Standard guest evaluation mode as mandated by dMATHub rules.',
+      description: 'Standard guest evaluation mode with limited diagnostic drill access.',
       features: [
         '10 fixed questions maximum',
         'No registration required',
