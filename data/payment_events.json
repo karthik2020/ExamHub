@@ -1,0 +1,928 @@
+[
+  {
+    "id": "21eb0f48-6bff-4272-8fef-998a82bc8f8e",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_pay_sig_test_1790693431148_payment_captured",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_sig_test_1790693431148",
+            "order_id": "order_sig_test_1790693431148",
+            "amount": 2900,
+            "currency": "EUR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790693431
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-29T14:50:31.608Z",
+    "processed_at": "2026-09-29T14:50:33.280Z"
+  },
+  {
+    "id": "7ed01d23-86bb-4c3e-8f48-6c71e8cd911a",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_idemp_1790693446449",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_idemp_1790693446449",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_idemp_1790693446449",
+            "order_id": "order_idemp_1790693446449",
+            "amount": 2900,
+            "currency": "EUR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790693446
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-29T14:50:46.731Z",
+    "processed_at": "2026-09-29T14:50:48.372Z"
+  },
+  {
+    "id": "c08b3967-2402-4dce-98c1-df5c5ec0ab26",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_wrong_amt_1790693456206",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_wrong_amt_1790693456206",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_wrong_amt_1790693456206",
+            "order_id": "order_wrong_amt_1790693456206",
+            "amount": 100,
+            "currency": "EUR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790693456
+    },
+    "status": "FAILED",
+    "created_at": "2026-09-29T14:50:56.574Z",
+    "processed_at": "2026-09-29T14:50:57.345Z",
+    "error_message": "Amount mismatch: expected 29, received 1"
+  },
+  {
+    "id": "eb6119ea-c276-4211-b224-07212d3a8ca6",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_wrong_curr_1790693457559",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_wrong_curr_1790693457559",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_wrong_curr_1790693457559",
+            "order_id": "order_wrong_curr_1790693457559",
+            "amount": 2900,
+            "currency": "JPY",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790693457
+    },
+    "status": "FAILED",
+    "created_at": "2026-09-29T14:50:57.671Z",
+    "processed_at": "2026-09-29T14:50:58.217Z",
+    "error_message": "Currency mismatch: expected EUR, received JPY"
+  },
+  {
+    "id": "0cd18959-dd1a-4b9d-90be-a9341fc69afe",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_failed_1790693458451",
+    "event_type": "payment.failed",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.failed",
+      "id": "evt_failed_1790693458451",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_failed_1790693458451",
+            "order_id": "order_failed_1790693458451",
+            "amount": 2900,
+            "currency": "EUR",
+            "status": "failed",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790693458
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-29T14:50:58.572Z",
+    "processed_at": "2026-09-29T14:50:58.886Z"
+  },
+  {
+    "id": "eaa2db42-cbcb-4d21-bf5b-20f23aac7b95",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_succ_1790693459226",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_succ_1790693459226",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_succ_1790693459226",
+            "order_id": "order_succ_1790693459226",
+            "amount": 2900,
+            "currency": "EUR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790693459
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-29T14:50:59.365Z",
+    "processed_at": "2026-09-29T14:51:00.518Z"
+  },
+  {
+    "id": "74f21658-8ce7-40ab-a49f-738a05ae8a1f",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_extend_1790693460851",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_extend_1790693460851",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_extend_1790693460851",
+            "order_id": "order_extend_1790693460851",
+            "amount": 2900,
+            "currency": "EUR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790693460
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-29T14:51:00.970Z",
+    "processed_at": "2026-09-29T14:51:02.093Z"
+  },
+  {
+    "id": "18340e3d-cd84-4f58-9bc9-f88c52d71397",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_wrong_amt_1790693498226",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_wrong_amt_1790693498226",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_wrong_amt_1790693498226",
+            "order_id": "order_wrong_amt_1790693498226",
+            "amount": 100,
+            "currency": "EUR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790693498
+    },
+    "status": "FAILED",
+    "created_at": "2026-09-29T14:51:38.422Z",
+    "processed_at": "2026-09-29T14:51:38.983Z",
+    "error_message": "Amount mismatch: expected 29, received 1"
+  },
+  {
+    "id": "6a2d96d8-49e8-4f8b-802e-4301c2169536",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_wrong_curr_1790693499205",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_wrong_curr_1790693499205",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_wrong_curr_1790693499205",
+            "order_id": "order_wrong_curr_1790693499205",
+            "amount": 2900,
+            "currency": "JPY",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790693499
+    },
+    "status": "FAILED",
+    "created_at": "2026-09-29T14:51:39.316Z",
+    "processed_at": "2026-09-29T14:51:39.836Z",
+    "error_message": "Currency mismatch: expected EUR, received JPY"
+  },
+  {
+    "id": "1b95722c-7391-45b3-ae04-f7c6f3accb7c",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_failed_1790693500072",
+    "event_type": "payment.failed",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.failed",
+      "id": "evt_failed_1790693500072",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_failed_1790693500072",
+            "order_id": "order_failed_1790693500072",
+            "amount": 2900,
+            "currency": "EUR",
+            "status": "failed",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790693500
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-29T14:51:40.215Z",
+    "processed_at": "2026-09-29T14:51:40.529Z"
+  },
+  {
+    "id": "d8e596ff-838e-4798-bd9e-0459442e5ca2",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_succ_1790693500871",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_succ_1790693500871",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_succ_1790693500871",
+            "order_id": "order_succ_1790693500871",
+            "amount": 2900,
+            "currency": "EUR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790693500
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-29T14:51:40.988Z",
+    "processed_at": "2026-09-29T14:51:42.173Z"
+  },
+  {
+    "id": "33fd5748-d97f-40bd-8743-030084af68e3",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_extend_1790693502504",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_extend_1790693502504",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_extend_1790693502504",
+            "order_id": "order_extend_1790693502504",
+            "amount": 2900,
+            "currency": "EUR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790693502
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-29T14:51:42.630Z",
+    "processed_at": "2026-09-29T14:51:43.703Z"
+  },
+  {
+    "id": "1f0d7e38-b518-410e-a66c-453fe48eb774",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_pay_revoc_1790693517110",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_pay_revoc_1790693517110",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_revoc_1790693517110",
+            "order_id": "order_revoc_1790693517110",
+            "amount": 2900,
+            "currency": "EUR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "26c4d739-399b-41c8-acb3-92e3925d2adb",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790693517
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-29T14:51:57.218Z",
+    "processed_at": "2026-09-29T14:51:58.545Z"
+  },
+  {
+    "id": "c1b22008-37f8-4010-b9aa-b3eb2057ed6c",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_rfnd_1790693519709",
+    "event_type": "refund.processed",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "refund.processed",
+      "id": "evt_rfnd_1790693519709",
+      "contains": [
+        "refund",
+        "payment"
+      ],
+      "payload": {
+        "refund": {
+          "entity": {
+            "id": "rfnd_1790693519709",
+            "payment_id": "pay_revoc_1790693517110",
+            "amount": 2900,
+            "currency": "EUR",
+            "status": "processed",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "26c4d739-399b-41c8-acb3-92e3925d2adb",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        },
+        "payment": {
+          "entity": {
+            "id": "pay_revoc_1790693517110",
+            "order_id": "order_revoc_1790693517110",
+            "amount": 2900,
+            "currency": "EUR",
+            "status": "refunded",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "26c4d739-399b-41c8-acb3-92e3925d2adb",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790693519
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-29T14:51:59.812Z",
+    "processed_at": "2026-09-29T14:52:00.390Z"
+  },
+  {
+    "id": "60d23e8c-7e16-47b5-8b62-c90ee67b0eba",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "pay_test_1790772042354",
+    "event_type": "payment.verified",
+    "payload": {
+      "razorpay_order_id": "order_1790772042352_d0e35537",
+      "razorpay_payment_id": "pay_test_1790772042354"
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-30T12:40:48.618Z",
+    "processed_at": "2026-09-30T12:40:49.419Z"
+  },
+  {
+    "id": "ff6a96ee-07a3-4c75-93f0-96cfb74ebdc8",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_pay_sig_test_1790772062209_payment_captured",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_sig_test_1790772062209",
+            "order_id": "order_sig_test_1790772062209",
+            "amount": 2900,
+            "currency": "EUR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790772062
+    },
+    "status": "FAILED",
+    "created_at": "2026-09-30T12:41:02.489Z",
+    "processed_at": "2026-09-30T12:41:03.231Z",
+    "error_message": "Amount mismatch: expected 2499, received 29"
+  },
+  {
+    "id": "3ab38f2c-8575-47a2-be6b-fcca43f93fe0",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_pay_sig_test_1790772100291_payment_captured",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_sig_test_1790772100291",
+            "order_id": "order_sig_test_1790772100291",
+            "amount": 249900,
+            "currency": "INR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790772100
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-30T12:41:40.606Z",
+    "processed_at": "2026-09-30T12:41:43.085Z"
+  },
+  {
+    "id": "2a4049a4-0c7d-4861-a290-a99ca2001dad",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_idemp_1790772113708",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_idemp_1790772113708",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_idemp_1790772113708",
+            "order_id": "order_idemp_1790772113708",
+            "amount": 249900,
+            "currency": "INR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790772113
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-30T12:41:53.947Z",
+    "processed_at": "2026-09-30T12:41:55.008Z"
+  },
+  {
+    "id": "9586b3d6-932b-41cc-8e48-63ade3410c03",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_wrong_amt_1790772126570",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_wrong_amt_1790772126570",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_wrong_amt_1790772126570",
+            "order_id": "order_wrong_amt_1790772126570",
+            "amount": 100,
+            "currency": "INR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790772126
+    },
+    "status": "FAILED",
+    "created_at": "2026-09-30T12:42:06.705Z",
+    "processed_at": "2026-09-30T12:42:07.310Z",
+    "error_message": "Amount mismatch: expected 2499, received 1"
+  },
+  {
+    "id": "45fd4c16-d532-47e1-bc1d-3feedb89c892",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_wrong_curr_1790772127686",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_wrong_curr_1790772127686",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_wrong_curr_1790772127686",
+            "order_id": "order_wrong_curr_1790772127686",
+            "amount": 249900,
+            "currency": "USD",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790772127
+    },
+    "status": "FAILED",
+    "created_at": "2026-09-30T12:42:07.792Z",
+    "processed_at": "2026-09-30T12:42:08.319Z",
+    "error_message": "Currency mismatch: expected INR, received USD"
+  },
+  {
+    "id": "d31df11f-3ef1-46d0-96dc-28cc2fd8b891",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_failed_1790772128691",
+    "event_type": "payment.failed",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.failed",
+      "id": "evt_failed_1790772128691",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_failed_1790772128691",
+            "order_id": "order_failed_1790772128691",
+            "amount": 249900,
+            "currency": "INR",
+            "status": "failed",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790772128
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-30T12:42:08.841Z",
+    "processed_at": "2026-09-30T12:42:09.318Z"
+  },
+  {
+    "id": "1e168d64-8009-41d9-8559-fe6cec54e86c",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_succ_1790772129752",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_succ_1790772129752",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_succ_1790772129752",
+            "order_id": "order_succ_1790772129752",
+            "amount": 249900,
+            "currency": "INR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790772129
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-30T12:42:09.857Z",
+    "processed_at": "2026-09-30T12:42:10.920Z"
+  },
+  {
+    "id": "8a30e9f9-6571-4cf2-8c26-11fb9f6edb76",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_extend_1790772131253",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_extend_1790772131253",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_extend_1790772131253",
+            "order_id": "order_extend_1790772131253",
+            "amount": 249900,
+            "currency": "INR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "10000000-0000-0000-0000-000000000002",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790772131
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-30T12:42:11.367Z",
+    "processed_at": "2026-09-30T12:42:12.421Z"
+  },
+  {
+    "id": "8e1c4a3d-8f3f-4c20-a79f-c0b615d6311a",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_pay_revoc_1790772148602",
+    "event_type": "payment.captured",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "payment.captured",
+      "id": "evt_pay_revoc_1790772148602",
+      "contains": [
+        "payment"
+      ],
+      "payload": {
+        "payment": {
+          "entity": {
+            "id": "pay_revoc_1790772148602",
+            "order_id": "order_revoc_1790772148602",
+            "amount": 249900,
+            "currency": "INR",
+            "status": "captured",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "0303dec8-b21c-4ba2-9db4-c0f945ab3816",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790772148
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-30T12:42:28.714Z",
+    "processed_at": "2026-09-30T12:42:30.347Z"
+  },
+  {
+    "id": "295a0cbb-ea0c-4a07-bc8a-4987a4e12188",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "evt_rfnd_1790772151623",
+    "event_type": "refund.processed",
+    "payload": {
+      "entity": "event",
+      "account_id": "acc_test_dmathub",
+      "event": "refund.processed",
+      "id": "evt_rfnd_1790772151623",
+      "contains": [
+        "refund",
+        "payment"
+      ],
+      "payload": {
+        "refund": {
+          "entity": {
+            "id": "rfnd_1790772151623",
+            "payment_id": "pay_revoc_1790772148602",
+            "amount": 249900,
+            "currency": "INR",
+            "status": "processed",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "0303dec8-b21c-4ba2-9db4-c0f945ab3816",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        },
+        "payment": {
+          "entity": {
+            "id": "pay_revoc_1790772148602",
+            "order_id": "order_revoc_1790772148602",
+            "amount": 249900,
+            "currency": "INR",
+            "status": "refunded",
+            "notes": {
+              "tenant_id": "a0000000-0000-0000-0000-000000000001",
+              "user_id": "0303dec8-b21c-4ba2-9db4-c0f945ab3816",
+              "plan_id": "e1000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "created_at": 1790772151
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-30T12:42:31.759Z",
+    "processed_at": "2026-09-30T12:42:32.416Z"
+  },
+  {
+    "id": "96871f44-5466-4eab-8aed-376f2b768604",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "pay_test_1790774116271",
+    "event_type": "payment.verified",
+    "payload": {
+      "razorpay_order_id": "order_1790774116269_3b1ac6ba",
+      "razorpay_payment_id": "pay_test_1790774116271"
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-09-30T13:15:23.087Z",
+    "processed_at": "2026-09-30T13:15:23.932Z"
+  }
+]

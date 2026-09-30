@@ -100,9 +100,17 @@ export const CMSDynamicPage: React.FC<CMSDynamicPageProps> = ({ forcedSlug }) =>
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{p.name}</span>
                     <div className="mt-2 mb-3">
                       <span className="text-3xl font-black text-slate-900">
-                        {p.price === 0 ? 'Free' : `€${p.price}`}
+                        {p.price === 0
+                          ? 'Free'
+                          : p.currency === 'INR'
+                          ? `₹${p.price.toLocaleString('en-IN')}`
+                          : `${p.currency || '₹'} ${p.price}`}
                       </span>
-                      {p.price > 0 && <span className="text-xs text-slate-500 font-medium"> / {p.billing_interval.toLowerCase()}</span>}
+                      {p.price > 0 && (
+                        <span className="text-xs text-slate-500 font-medium">
+                          {' '}• {p.billing_interval === 'ONE_TIME' ? '90-Day Pass' : p.billing_interval.toLowerCase()}
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-600 mb-4">{p.description}</p>
                     <ul className="space-y-2 text-xs text-slate-600 mb-6">

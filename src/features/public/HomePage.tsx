@@ -296,7 +296,7 @@ export const HomePage: React.FC = () => {
               </div>
 
               <div className="text-3xl font-black text-slate-900">
-                €0 <span className="text-xs font-medium text-slate-500">Free forever</span>
+                Free <span className="text-xs font-medium text-slate-500">No account required</span>
               </div>
 
               <ul className="space-y-3 text-xs text-slate-700">
@@ -341,7 +341,7 @@ export const HomePage: React.FC = () => {
               </div>
 
               <div className="text-3xl font-black text-slate-900">
-                €0 <span className="text-xs font-medium text-slate-500">Free with account</span>
+                Free <span className="text-xs font-medium text-slate-500">Free with account</span>
               </div>
 
               <ul className="space-y-3 text-xs text-slate-700">
@@ -393,7 +393,7 @@ export const HomePage: React.FC = () => {
               </div>
 
               <div className="text-3xl font-black text-white">
-                €29 <span className="text-xs font-medium text-teal-300">/ month</span>
+                ₹2,499 <span className="text-xs font-medium text-teal-300">One-time payment • 90 days</span>
               </div>
 
               <ul className="space-y-3 text-xs text-teal-100">

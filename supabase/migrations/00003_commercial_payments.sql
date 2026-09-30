@@ -17,7 +17,7 @@ WHERE id = 'e1000000-0000-0000-0000-000000000003';
 -- 2. ENHANCE SUBSCRIPTIONS TABLE
 -- Add provider tracking, billing windows, and grace periods
 ALTER TABLE subscriptions
-  ADD COLUMN IF NOT EXISTS provider VARCHAR(64) DEFAULT 'PADDLE',
+  ADD COLUMN IF NOT EXISTS provider VARCHAR(64) DEFAULT 'RAZORPAY',
   ADD COLUMN IF NOT EXISTS provider_subscription_id VARCHAR(255),
   ADD COLUMN IF NOT EXISTS provider_customer_id VARCHAR(255),
   ADD COLUMN IF NOT EXISTS current_period_start TIMESTAMPTZ,

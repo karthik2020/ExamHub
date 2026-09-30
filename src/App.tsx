@@ -21,6 +21,7 @@ import { ContactPage } from './features/public/ContactPage';
 
 // Student Portal Pages
 import { AttemptResults } from './features/student/AttemptResults';
+import { CheckoutSuccessPage } from './features/student/CheckoutSuccessPage';
 import { MockTestSession } from './features/student/MockTestSession';
 import { PracticeSession } from './features/student/PracticeSession';
 import { StudentDashboard } from './features/student/StudentDashboard';
@@ -178,6 +179,7 @@ const MainRouter: React.FC = () => {
           <Route path="results/:attemptId" element={<AttemptResults />} />
           <Route path="progress" element={<StudentProgress />} />
           <Route path="study-plan" element={<StudyPlanView />} />
+          <Route path="checkout/success" element={<CheckoutSuccessPage />} />
         </Route>
 
         <Route
@@ -190,6 +192,7 @@ const MainRouter: React.FC = () => {
           <Route path="results/:attemptId" element={<AttemptResults />} />
           <Route path="progress" element={<StudentProgress />} />
           <Route path="study-plan" element={<StudyPlanView />} />
+          <Route path="checkout/success" element={<CheckoutSuccessPage />} />
         </Route>
 
         {studentPortalPath !== '/ems' && studentPortalPath !== '/portal' && (
@@ -203,6 +206,7 @@ const MainRouter: React.FC = () => {
             <Route path="results/:attemptId" element={<AttemptResults />} />
             <Route path="progress" element={<StudentProgress />} />
             <Route path="study-plan" element={<StudyPlanView />} />
+            <Route path="checkout/success" element={<CheckoutSuccessPage />} />
           </Route>
         )}
 

@@ -86,14 +86,14 @@ export interface GridSymbol {
   id: string;
   row: number; // 0 to 3 for a 4x4 grid
   col: number; // 0 to 3
-  shape: SymbolShape;
-  fill: SymbolFill;
+  shape: SymbolShape | string;
+  fill: SymbolFill | string;
   rotation: number; // 0, 90, 180, 270 degrees
   color?: string;
 }
 
 export interface FigureGrid {
-  dimension: 4;
+  dimension: 4 | number;
   symbols: GridSymbol[];
 }
 
@@ -111,13 +111,13 @@ export interface FigureSequenceQuestionData {
 export interface QuestionOption {
   id: string;
   question_id: string;
-  option_key: 'A' | 'B' | 'C' | 'D';
+  option_key: 'A' | 'B' | 'C' | 'D' | string;
   option_text?: string;
   option_data?: {
     grid5: FigureGrid;
     grid6: FigureGrid;
   } | any;
-  display_order: number;
+  display_order?: number;
   is_correct?: boolean; // Stripped on client during active tests
 }
 
@@ -186,6 +186,11 @@ export interface Attempt {
   user_id: string;
   practice_test_id: string;
   practice_test_name?: string;
+  exam_id?: string;
+  test_name?: string;
+  test_type?: string;
+  total_questions?: number;
+  completed_at?: string;
   started_at: string;
   submitted_at?: string;
   time_limit_seconds: number;
@@ -297,5 +302,6 @@ export interface AuditLog {
   entity_id: string;
   old_data?: any;
   new_data?: any;
+  payload?: any;
   created_at: string;
 }

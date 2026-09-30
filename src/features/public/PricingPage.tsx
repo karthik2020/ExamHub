@@ -1,13 +1,58 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Check, X, ArrowRight, ShieldCheck, HelpCircle, Sparkles, CreditCard } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Check, X, ArrowRight, ShieldCheck, Sparkles, CreditCard, Loader2 } from 'lucide-react';
 import { SEOHead } from '../../components/common/SEOHead';
 import { useTenant } from '../../contexts/TenantContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { Plan } from '../../types';
+import { apiFetch } from '../../services/apiClient';
 
 export const PricingPage: React.FC = () => {
   const { studentPortalPath } = useTenant();
-  const { setLoginModalOpen, isAuthenticated, entitlement } = useAuth();
+  const { setLoginModalOpen, isAuthenticated, entitlement, user } = useAuth();
+  const navigate = useNavigate();
+
+  const [commercialPlan, setCommercialPlan] = useState<Plan | null>(null);
+  const [loadingPlan, setLoadingPlan] = useState(true);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadPlans() {
+      try {
+        const res = await fetch('/api/plans');
+        if (res.ok) {
+          const plans: Plan[] = await res.json();
+          // Find the active commercial upgrade plan
+          const pro = plans.find((p) => p.price > 0 && p.status === 'ACTIVE') || plans[plans.length - 1];
+          if (pro) {
+            setCommercialPlan(pro);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load plans:', err);
+      } finally {
+        setLoadingPlan(false);
+      }
+    }
+    loadPlans();
+  }, []);
+
+  const formatPrice = (price: number, currency: string) => {
+    if (currency.toUpperCase() === 'INR') {
+      return `₹${price.toLocaleString('en-IN')}`;
+    }
+    if (currency.toUpperCase() === 'EUR') {
+      return `€${price.toLocaleString()}`;
+    }
+    if (currency.toUpperCase() === 'USD') {
+      return `$${price.toLocaleString()}`;
+    }
+    return `${currency} ${price}`;
+  };
+
+  const planPriceDisplay = '₹2,499';
+  const planIntervalDisplay = 'One-time payment • 90 days full examination access';
 
   const comparisonFeatures = [
     { name: '10-Question Diagnostic Test', guest: true, registered: true, pro: true },
@@ -23,11 +68,106 @@ export const PricingPage: React.FC = () => {
     { name: 'Full-Length 90-Minute Timed Simulation Mocks', guest: false, registered: false, pro: true },
   ];
 
+  // Dynamically load Razorpay standard checkout script
+  const loadRazorpayScript = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if ((window as any).Razorpay) {
+        resolve(true);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handleCheckout = async () => {
+    if (!isAuthenticated) {
+      setLoginModalOpen(true);
+      return;
+    }
+
+    if (entitlement.level === 'PREMIUM') {
+      navigate(`${studentPortalPath || '/ems'}/mock-tests`);
+      return;
+    }
+
+    setCheckoutLoading(true);
+    setCheckoutError(null);
+
+    try {
+      const planId = commercialPlan?.id || 'e1000000-0000-0000-0000-000000000003';
+      const session = await apiFetch<any>('/api/checkout/create-session', {
+        method: 'POST',
+        body: JSON.stringify({ plan_id: planId }),
+      });
+
+      const scriptLoaded = await loadRazorpayScript();
+
+      if (!scriptLoaded || !(window as any).Razorpay) {
+        throw new Error('Could not load Razorpay payment gateway. Please check network connectivity.');
+      }
+
+      const options = {
+        key: session.key_id,
+        amount: session.amount,
+        currency: session.currency,
+        name: 'dMATHub',
+        description: `${session.plan?.name || 'dMAT'} 90-Day Examination Access Pass`,
+        order_id: session.order_id,
+        handler: async function (response: any) {
+          try {
+            setCheckoutLoading(true);
+            setCheckoutError(null);
+            // Forward returned identifiers to server for authoritative verification
+            await apiFetch('/api/checkout/verify', {
+              method: 'POST',
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
+            // Only after backend verification succeeds redirect to /ems/checkout/success
+            navigate(
+              `/ems/checkout/success?order_id=${encodeURIComponent(response.razorpay_order_id)}&payment_id=${encodeURIComponent(response.razorpay_payment_id)}`
+            );
+          } catch (e: any) {
+            console.error('Server verification submission error:', e);
+            setCheckoutError(e.message || 'Payment verification failed on the server. Please contact support.');
+          } finally {
+            setCheckoutLoading(false);
+          }
+        },
+        prefill: {
+          name: user?.name,
+          email: user?.email,
+        },
+        theme: {
+          color: '#0f766e',
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', function (resp: any) {
+        setCheckoutError(`Payment failed: ${resp.error?.description || 'Transaction was declined.'}`);
+      });
+      rzp.open();
+    } catch (err: any) {
+      console.error('Checkout error:', err);
+      setCheckoutError(err.message || 'Payment initiation failed. Please try again.');
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-20 py-10 sm:py-16">
       <SEOHead
         title="dMATHub Pricing & Access Tiers — Transparent Preparation Plans"
-        description="Choose your dMAT preparation tier: Free Guest diagnostic, Registered Member question bank access, or PRO Unlimited Procedural Generator."
+        description="Choose your dMAT preparation tier: Free Guest diagnostic, Registered Member question bank access, or PRO 90-Day Examination Access Pass with Unlimited Procedural Generator."
         canonical="https://dmathub.com/pricing"
       />
 
@@ -45,8 +185,14 @@ export const PricingPage: React.FC = () => {
 
           <p className="text-base sm:text-lg text-slate-600 leading-relaxed font-normal">
             Begin as a Free Guest without creating an account. Register for the full verified curriculum bank,
-            or upgrade to PRO for unlimited procedural matrix generation and full-length exam simulations.
+            or upgrade to PRO for 90 days of unlimited procedural matrix generation and full-length exam simulations.
           </p>
+
+          {checkoutError && (
+            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium max-w-md mx-auto">
+              {checkoutError}
+            </div>
+          )}
         </div>
       </section>
 
@@ -65,7 +211,7 @@ export const PricingPage: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <div className="text-4xl font-black text-slate-900">€0</div>
+                <div className="text-4xl font-black text-slate-900">Free</div>
                 <div className="text-xs text-slate-500">No account or credit card needed</div>
               </div>
 
@@ -119,7 +265,7 @@ export const PricingPage: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <div className="text-4xl font-black text-slate-900">€0</div>
+                <div className="text-4xl font-black text-slate-900">Free</div>
                 <div className="text-xs text-slate-500">Free forever with email account</div>
               </div>
 
@@ -168,22 +314,25 @@ export const PricingPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-teal-300">Tier 3</span>
                 <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-teal-500/30 text-teal-200 border border-teal-400/30">
-                  Comprehensive Mastery
+                  90-Day Full Access
                 </span>
               </div>
 
               <div>
-                <h3 className="text-2xl font-black text-white">Pro Unlimited</h3>
+                <h3 className="text-2xl font-black text-white">Pro Unlimited Pass</h3>
                 <p className="text-xs text-teal-200 mt-1.5 leading-relaxed">
-                  Endless procedural Figure Sequence variations, difficulty controls, and full-length timed mocks.
+                  90 days of endless procedural Figure Sequence variations, difficulty controls, and full-length timed mocks.
                 </p>
               </div>
 
               <div className="space-y-1">
                 <div className="text-4xl font-black text-white">
-                  €29 <span className="text-xs font-medium text-teal-300">/ month</span>
+                  {loadingPlan ? '...' : planPriceDisplay}
+                  <span className="text-xs font-medium text-teal-300 block mt-1">
+                    {planIntervalDisplay}
+                  </span>
                 </div>
-                <div className="text-xs text-teal-300">Cancel anytime • Commercial plan</div>
+                <div className="text-xs text-teal-300">One-time purchase • No auto-renewal</div>
               </div>
 
               <div className="pt-4 border-t border-teal-800 space-y-3 text-xs text-teal-100">
@@ -209,7 +358,7 @@ export const PricingPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Check className="w-4 h-4 text-teal-300 shrink-0" />
-                  <span>All registered member capabilities included</span>
+                  <span>90-day authoritative access window</span>
                 </div>
               </div>
             </div>
@@ -217,18 +366,20 @@ export const PricingPage: React.FC = () => {
             <div className="pt-8 mt-6 border-t border-teal-800">
               <button
                 type="button"
-                onClick={() => {
-                  if (!isAuthenticated) {
-                    setLoginModalOpen(true);
-                  } else {
-                    alert(
-                      'Payment Gateway Status: The subscription checkout pipeline is currently in commercial readiness mode. Your account entitlement can be managed in your profile settings.'
-                    );
-                  }
-                }}
-                className="w-full py-3.5 rounded-xl bg-white text-teal-950 hover:bg-teal-50 font-bold text-xs text-center block transition-colors shadow-md cursor-pointer"
+                disabled={checkoutLoading}
+                onClick={handleCheckout}
+                className="w-full py-3.5 rounded-xl bg-white text-teal-950 hover:bg-teal-50 font-bold text-xs text-center flex items-center justify-center gap-2 transition-colors shadow-md cursor-pointer disabled:opacity-75"
               >
-                {isAuthenticated && entitlement.level === 'PREMIUM' ? 'Current Plan: PRO' : 'Subscribe to PRO (€29/mo)'}
+                {checkoutLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-teal-900" />
+                    <span>Preparing Checkout...</span>
+                  </>
+                ) : isAuthenticated && entitlement.level === 'PREMIUM' ? (
+                  'Current Plan: PRO (Active Pass)'
+                ) : (
+                  'Get 90-Day Access — ₹2,499'
+                )}
               </button>
             </div>
           </div>
@@ -252,7 +403,9 @@ export const PricingPage: React.FC = () => {
                   <th className="p-4 sm:p-5 font-bold text-teal-900 text-center w-40 bg-teal-50/50">
                     Registered (Free)
                   </th>
-                  <th className="p-4 sm:p-5 font-bold text-slate-900 text-center w-40">PRO (€29/mo)</th>
+                  <th className="p-4 sm:p-5 font-bold text-slate-900 text-center w-40">
+                    PRO ({planPriceDisplay})
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -297,9 +450,9 @@ export const PricingPage: React.FC = () => {
           </div>
           <p className="leading-relaxed">
             dMATHub utilizes a multi-tenant entitlement architecture backed by authoritative database verification.
-            Subscription billing is charged at €29/month in EUR. The commercial checkout pipeline is currently in
-            pre-release readiness mode; candidates can test PRO generation capabilities and upgrade profiles directly in
-            the authentication management drawer.
+            Examination Access Passes are one-time commercial purchases with a 90-day validity window and no recurring
+            auto-renewal. Commercial payments are processed through Razorpay Test Mode with backend-authoritative signature
+            verification.
           </p>
         </div>
       </section>

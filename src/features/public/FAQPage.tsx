@@ -49,7 +49,7 @@ export const FAQPage: React.FC = () => {
     {
       category: 'Plans & Access',
       q: 'What is the difference between Free, Registered, and PRO?',
-      a: 'Free Guest provides the 10-question diagnostic. Registered Member (free) grants full access to the published verified question bank, detailed step-by-step SVG solutions, attempt history, and the Readiness Index. PRO (€29/mo) unlocks the unlimited procedural generator with Easy/Medium/Hard controls and full mock simulations.',
+      a: 'Free Guest provides the 10-question diagnostic. Registered Member (free) grants full access to the published verified question bank, detailed step-by-step SVG solutions, attempt history, and the Readiness Index. PRO (₹2,499 one-time for 90 days) unlocks the unlimited procedural generator with Easy/Medium/Hard controls and full mock simulations.',
     },
     {
       category: 'Plans & Access',
@@ -73,8 +73,8 @@ export const FAQPage: React.FC = () => {
     },
     {
       category: 'Plans & Access',
-      q: 'What is the current payment gateway status for PRO?',
-      a: 'The subscription billing infrastructure is in commercial readiness mode. Candidates can explore PRO procedural generation features and manage their access tier within the authentication profile console.',
+      q: 'How does PRO billing work and is it a recurring subscription?',
+      a: 'The PRO access pass is ₹2,499 as a one-time purchase granting 90 days of complete examination access. There is no recurring subscription or automatic renewal. Payments are processed securely via Razorpay Test Mode with backend-authoritative verification.',
     },
   ];
 

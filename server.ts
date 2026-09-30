@@ -893,14 +893,73 @@ async function startServer() {
     }
   });
 
+  app.post('/api/checkout/verify', requireAuth as any, async (req, res) => {
+    try {
+      const authUser = (req as any).user;
+      const tenantId = (req.query.tenant_id as string) || (req.headers['x-tenant-id'] as string) || 'a0000000-0000-0000-0000-000000000001';
+      const profile = await syncUserAndTenant(authUser, tenantId);
+
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        return res.status(400).json({
+          error: 'razorpay_order_id, razorpay_payment_id, and razorpay_signature are required',
+        });
+      }
+
+      const result = await paymentService.verifyPayment(
+        authUser.id,
+        profile.tenant_id,
+        { razorpay_order_id, razorpay_payment_id, razorpay_signature }
+      );
+
+      res.json(result);
+    } catch (err: any) {
+      const status = err.message.includes('Forbidden') ? 403 : 400;
+      res.status(status).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/checkout/verify-payment', requireAuth as any, async (req, res) => {
+    try {
+      const authUser = (req as any).user;
+      const tenantId = (req.query.tenant_id as string) || (req.headers['x-tenant-id'] as string) || 'a0000000-0000-0000-0000-000000000001';
+      const profile = await syncUserAndTenant(authUser, tenantId);
+
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        return res.status(400).json({
+          error: 'razorpay_order_id, razorpay_payment_id, and razorpay_signature are required',
+        });
+      }
+
+      const result = await paymentService.verifyPayment(
+        authUser.id,
+        profile.tenant_id,
+        { razorpay_order_id, razorpay_payment_id, razorpay_signature }
+      );
+
+      res.json(result);
+    } catch (err: any) {
+      const status = err.message.includes('Forbidden') ? 403 : 400;
+      res.status(status).json({ error: err.message });
+    }
+  });
+
   app.get('/api/webhooks/payments', (req, res) => {
     res.json({
       status: 'active',
       service: 'ExamHub Payment Webhook Listener',
-      provider: 'Paddle',
-      mode: 'sandbox',
+      provider: 'RAZORPAY',
+      mode: 'test',
       supported_methods: ['POST'],
-      description: 'Authoritative payment webhook receiver for Paddle Billing events.',
+      supported_events: [
+        'payment.captured',
+        'payment.failed',
+        'order.paid',
+        'refund.created',
+        'refund.processed',
+      ],
+      description: 'Authoritative payment webhook receiver for Razorpay Test Mode billing events.',
     });
   });
 
@@ -913,9 +972,16 @@ async function startServer() {
         ? req.body
         : JSON.stringify(req.body);
 
-      const signature = (req.headers['paddle-signature'] as string) || (req.headers['Paddle-Signature'] as string);
+      const signature =
+        (req.headers['x-razorpay-signature'] as string) ||
+        (req.headers['X-Razorpay-Signature'] as string) ||
+        (req.headers['razorpay-signature'] as string);
 
-      const result = await paymentService.handleWebhook(rawBody, signature);
+      const eventId =
+        (req.headers['x-razorpay-event-id'] as string) ||
+        (req.headers['X-Razorpay-Event-Id'] as string);
+
+      const result = await paymentService.handleWebhook(rawBody, signature, eventId);
       return res.status(result.statusCode).json(result.body);
     } catch (err: any) {
       console.error('[PaymentWebhook] Unhandled error:', err);

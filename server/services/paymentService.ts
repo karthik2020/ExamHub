@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { getSupabaseAdminClient } from '../supabase';
-import { paddleProvider, ParsedPaymentEvent } from './paymentProvider';
+import { razorpayProvider, ParsedPaymentEvent } from './paymentProvider';
 import { Plan, Subscription, Payment } from '../../src/types';
 
 export interface PaymentEventRecord {
@@ -47,8 +48,9 @@ export class PaymentService {
   private processingLocks = new Set<string>();
 
   /**
-   * Authoritative checkout session creation.
+   * Authoritative checkout session / Razorpay order creation.
    * Resolves plan price and access pass duration strictly server-side.
+   * Never trusts client-supplied amount, currency, duration, tier, or user_id.
    */
   async createCheckoutSession(userId: string, tenantId: string, planId: string, authHeader?: string) {
     const admin = getSupabaseAdminClient();
@@ -59,7 +61,7 @@ export class PaymentService {
     // 1. Verify candidate user exists
     const { data: user, error: userError } = await admin
       .from('users')
-      .select('id, email, full_name')
+      .select('id, email, name')
       .eq('id', userId)
       .maybeSingle();
 
@@ -83,18 +85,27 @@ export class PaymentService {
       throw new Error(`Forbidden: Plan belongs to tenant ${plan.tenant_id}, but checkout was requested for tenant ${tenantId}`);
     }
 
-    // 4. Verify plan is active
+    // 4. Verify plan is active, ONE_TIME, and currency INR
     if (plan.status !== 'ACTIVE') {
       throw new Error(`Plan ${plan.name} is not active for commercial checkout`);
     }
 
-    // 5. Server-authoritative resolution
-    const durationDays = (plan as any).duration_days || (plan.billing_interval === 'ONE_TIME' ? 30 : 30);
-    const amount = Number(plan.price);
-    const currency = plan.currency || 'EUR';
+    if (plan.billing_interval !== 'ONE_TIME') {
+      throw new Error(`Invalid billing interval: ${plan.billing_interval}. Only ONE_TIME plans are supported for Razorpay checkout.`);
+    }
 
-    // 6. Create hosted checkout session via Provider Adapter
-    const checkoutResult = await paddleProvider.createCheckoutSession({
+    const currency = (plan.currency || 'INR').toUpperCase();
+    if (currency !== 'INR') {
+      throw new Error(`Invalid plan currency: ${currency}. Only INR plans are supported for Razorpay Test Mode checkout.`);
+    }
+
+    // 5. Server-authoritative resolution of price, currency, and duration
+    // Duration must be 90 days for this one-time plan
+    const durationDays = 90;
+    const amount = Number(plan.price);
+
+    // 6. Create Razorpay order via Razorpay Provider Adapter
+    const orderResult = await razorpayProvider.createOrder({
       tenant_id: tenantId,
       user_id: userId,
       user_email: user.email,
@@ -103,11 +114,15 @@ export class PaymentService {
       amount,
       currency,
       duration_days: durationDays,
-      return_url: '/ems/checkout/success',
     });
 
     return {
-      ...checkoutResult,
+      order_id: orderResult.order_id,
+      key_id: orderResult.key_id,
+      amount: orderResult.amount, // in paise
+      currency: orderResult.currency,
+      provider: 'RAZORPAY',
+      mode: 'test',
       plan: {
         id: plan.id,
         name: plan.name,
@@ -117,6 +132,238 @@ export class PaymentService {
         duration_days: durationDays,
       },
     };
+  }
+
+  /**
+   * Server-side payment verification after Razorpay Checkout completion.
+   * Cryptographically verifies razorpay_order_id, razorpay_payment_id, and razorpay_signature.
+   * Checks against server-authoritative database plan before activating access pass.
+   */
+  async verifyPayment(
+    userId: string,
+    tenantId: string,
+    orderIdOrParams:
+      | string
+      | {
+          razorpay_order_id: string;
+          razorpay_payment_id: string;
+          razorpay_signature: string;
+        },
+    paymentId?: string,
+    signature?: string
+  ) {
+    let order_id: string;
+    let payment_id: string;
+    let sig: string;
+
+    if (typeof orderIdOrParams === 'object' && orderIdOrParams !== null) {
+      order_id = orderIdOrParams.razorpay_order_id;
+      payment_id = orderIdOrParams.razorpay_payment_id;
+      sig = orderIdOrParams.razorpay_signature;
+    } else {
+      order_id = orderIdOrParams as string;
+      payment_id = paymentId || '';
+      sig = signature || '';
+    }
+
+    if (!order_id || !payment_id || !sig) {
+      throw new Error('Missing required Razorpay verification parameters: razorpay_order_id, razorpay_payment_id, and razorpay_signature are required');
+    }
+
+    // 1. Cryptographic HMAC-SHA256 signature verification
+    const isValid = razorpayProvider.verifyPaymentSignature({
+      razorpay_order_id: order_id,
+      razorpay_payment_id: payment_id,
+      razorpay_signature: sig,
+    });
+    if (!isValid) {
+      throw new Error('Invalid Razorpay payment signature');
+    }
+
+    // 2. Retrieve trusted server-side order record from cache or Razorpay Orders API
+    let order = razorpayProvider.getOrder(order_id);
+    if (!order) {
+      order = await razorpayProvider.fetchOrder(order_id);
+    }
+    if (!order) {
+      throw new Error(`Order ${order_id} not found in authoritative order records`);
+    }
+
+    // 3. Verify order ownership
+    if (order.tenant_id !== tenantId || order.user_id !== userId) {
+      throw new Error('Forbidden: Order does not match authenticated candidate or tenant');
+    }
+
+    const admin = getSupabaseAdminClient();
+    if (!admin) {
+      throw new Error('Database admin client unavailable');
+    }
+
+    // 4. Fetch authoritative plan from PostgreSQL
+    const { data: plan, error: planError } = await admin
+      .from('plans')
+      .select('*')
+      .eq('id', order.plan_id)
+      .maybeSingle();
+
+    if (planError || !plan) {
+      throw new Error(`Plan ${order.plan_id} not found in database`);
+    }
+
+    if (plan.tenant_id !== tenantId) {
+      throw new Error('Cross-tenant plan integrity violation');
+    }
+
+    const expectedAmount = Number(plan.price);
+    const expectedPaise = Math.round(expectedAmount * 100);
+    if (order.amount !== expectedPaise) {
+      throw new Error(`Price integrity violation: expected ${expectedPaise} paise, order has ${order.amount}`);
+    }
+
+    const expectedCurrency = (plan.currency || 'INR').toUpperCase();
+    if (order.currency !== expectedCurrency) {
+      throw new Error(`Currency integrity violation: expected ${expectedCurrency}, order has ${order.currency}`);
+    }
+
+    // 5. Authoritative Idempotency check using payment ID
+    const lockKey = `${tenantId}:RAZORPAY:${payment_id}`;
+    const { acquired, record } = await this.acquireEventLock(
+      tenantId,
+      'RAZORPAY',
+      payment_id,
+      'payment.verified',
+      { razorpay_order_id: order_id, razorpay_payment_id: payment_id }
+    );
+
+    if (!acquired) {
+      console.log(`[PaymentService] Duplicate payment verification ignored: ${payment_id}`);
+      return {
+        success: true,
+        message: 'Payment was previously verified and processed',
+        duplicate: true,
+        tier: 'PAID',
+      };
+    }
+
+    try {
+      // 6. Record completed payment in PostgreSQL
+      const paymentPayload = {
+        tenant_id: tenantId,
+        user_id: userId,
+        provider: 'RAZORPAY',
+        provider_payment_id: payment_id,
+        amount: expectedAmount,
+        currency: expectedCurrency,
+        status: 'COMPLETED',
+      };
+
+      const { data: insertedPayment, error: paymentError } = await admin
+        .from('payments')
+        .insert(paymentPayload)
+        .select()
+        .single();
+
+      if (paymentError) {
+        console.error('[PaymentService] Error inserting payment:', paymentError);
+      }
+
+      // 7. Authoritative 90-Day Access Pass Activation or Extension
+      const durationDays = (plan as any).duration_days || (plan.billing_interval === 'ONE_TIME' ? 90 : 90);
+
+      // Check existing active subscription
+      const { data: activeSub } = await admin
+        .from('subscriptions')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('user_id', userId)
+        .eq('status', 'ACTIVE')
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let targetSubscriptionId: string;
+      let targetExpiresAt: string;
+
+      if (activeSub) {
+        // Extend: MAX(existing_expiry, now) + duration
+        const existingExpiryMs = activeSub.expires_at ? new Date(activeSub.expires_at).getTime() : Date.now();
+        const baseMs = Math.max(existingExpiryMs, Date.now());
+        const newExpiry = new Date(baseMs + durationDays * 86400 * 1000);
+        targetExpiresAt = newExpiry.toISOString();
+
+        await admin
+          .from('subscriptions')
+          .update({
+            plan_id: plan.id,
+            expires_at: targetExpiresAt,
+            status: 'ACTIVE',
+          })
+          .eq('id', activeSub.id);
+
+        targetSubscriptionId = activeSub.id;
+        console.log(`[PaymentService] Extended active subscription ${activeSub.id} until ${targetExpiresAt}`);
+      } else {
+        // Activate new access pass
+        targetExpiresAt = new Date(Date.now() + durationDays * 86400 * 1000).toISOString();
+        const { data: newSub, error: subError } = await admin
+          .from('subscriptions')
+          .insert({
+            tenant_id: tenantId,
+            user_id: userId,
+            plan_id: plan.id,
+            status: 'ACTIVE',
+            started_at: new Date().toISOString(),
+            expires_at: targetExpiresAt,
+          })
+          .select()
+          .single();
+
+        if (subError) {
+          throw new Error(`Failed to activate subscription in PostgreSQL: ${subError.message}`);
+        }
+        targetSubscriptionId = newSub.id;
+        console.log(`[PaymentService] Created new active 90-day subscription ${newSub.id} expiring at ${targetExpiresAt}`);
+      }
+
+      // 8. Link subscription ID in payments table
+      if (insertedPayment?.id) {
+        await admin
+          .from('payments')
+          .update({ subscription_id: targetSubscriptionId })
+          .eq('id', insertedPayment.id);
+      }
+
+      // 9. Authoritative Audit Log
+      await admin.from('audit_logs').insert({
+        tenant_id: tenantId,
+        user_id: userId,
+        action: 'PAYMENT_SUCCEEDED',
+        entity_type: 'subscription',
+        entity_id: targetSubscriptionId,
+        new_data: {
+          payment_id: insertedPayment?.id,
+          provider_payment_id: payment_id,
+          provider_order_id: order_id,
+          plan_name: plan.name,
+          duration_days: durationDays,
+          expires_at: targetExpiresAt,
+        },
+      });
+
+      // 10. Finalize event record
+      await this.finalizeEventRecord(record, 'PROCESSED');
+
+      return {
+        success: true,
+        payment_id: insertedPayment?.id,
+        subscription_id: targetSubscriptionId,
+        tier: 'PAID',
+        expires_at: targetExpiresAt,
+      };
+    } catch (err: any) {
+      await this.finalizeEventRecord(record, 'FAILED', err.message);
+      throw err;
+    }
   }
 
   /**
@@ -297,16 +544,19 @@ export class PaymentService {
 
   /**
    * Secure Webhook Pipeline:
-   * 1. Cryptographic signature check
-   * 2. Replay attack rejection
-   * 3. Database-backed idempotency check
-   * 4. Metadata verification against PostgreSQL (tenant, user, plan, amount)
-   * 5. Authoritative subscription / payment state mutations
-   * 6. Audit logging
+   * 1. Cryptographic HMAC-SHA256 signature check (X-Razorpay-Signature)
+   * 2. Authoritative Database-backed idempotency check
+   * 3. Metadata verification against PostgreSQL (tenant, user, plan, amount)
+   * 4. Authoritative subscription / payment state mutations
+   * 5. Audit logging
    */
-  async handleWebhook(rawBody: string, signatureHeader?: string): Promise<{ statusCode: number; body: any }> {
+  async handleWebhook(
+    rawBody: string,
+    signatureHeader?: string,
+    eventIdHeader?: string
+  ): Promise<{ statusCode: number; body: any }> {
     // 1. Verify cryptographic signature
-    const verification = paddleProvider.verifyWebhook(rawBody, signatureHeader);
+    const verification = razorpayProvider.verifyWebhook(rawBody, signatureHeader);
     if (!verification.isValid) {
       console.log(`[PaymentWebhook] Unsigned or invalid webhook rejected (HTTP 400): ${verification.error}`);
       return {
@@ -326,8 +576,8 @@ export class PaymentService {
       };
     }
 
-    // 3. Parse event structure
-    const event = paddleProvider.parseWebhook(payload);
+    // 3. Parse Razorpay event structure
+    const event = razorpayProvider.parseWebhook(payload, eventIdHeader);
     const tenantId = event.tenant_id;
     const userId = event.user_id;
     const planId = event.plan_id;
@@ -335,7 +585,7 @@ export class PaymentService {
     if (!tenantId) {
       return {
         statusCode: 422,
-        body: { error: 'Missing tenant_id in webhook custom_data metadata' },
+        body: { error: 'Missing tenant_id in webhook notes metadata' },
       };
     }
 
@@ -380,8 +630,20 @@ export class PaymentService {
         };
       }
 
-      // 6. Handle Non-Success Events (Cancellation, Failure, Ignored)
+      // 6. Handle Non-Success Events (Failure, Ignored)
       if (event.status !== 'SUCCEEDED') {
+        if (event.status === 'FAILED' && event.provider_payment_id) {
+          // Record failed payment
+          await admin.from('payments').insert({
+            tenant_id: tenantId,
+            user_id: userId || '00000000-0000-0000-0000-000000000000',
+            provider: 'RAZORPAY',
+            provider_payment_id: event.provider_payment_id,
+            amount: event.amount || 0,
+            currency: event.currency || 'INR',
+            status: 'FAILED',
+          });
+        }
         await this.finalizeEventRecord(record, 'PROCESSED');
         return {
           statusCode: 200,
@@ -391,10 +653,10 @@ export class PaymentService {
 
       // 7. Verify metadata against authoritative database
       if (!userId || !planId) {
-        await this.finalizeEventRecord(record, 'FAILED', 'Missing user_id or plan_id in custom_data');
+        await this.finalizeEventRecord(record, 'FAILED', 'Missing user_id or plan_id in notes');
         return {
           statusCode: 422,
-          body: { error: 'Missing user_id or plan_id in webhook custom_data metadata' },
+          body: { error: 'Missing user_id or plan_id in webhook notes metadata' },
         };
       }
 
@@ -436,7 +698,7 @@ export class PaymentService {
         };
       }
 
-      // Check amount and currency matches authoritative plan
+      // Check amount and currency match authoritative plan
       const expectedAmount = Number(plan.price);
       if (event.amount !== undefined && event.amount > 0 && Math.abs(event.amount - expectedAmount) > 0.05) {
         await this.finalizeEventRecord(
@@ -450,14 +712,27 @@ export class PaymentService {
         };
       }
 
+      const expectedCurrency = (plan.currency || 'INR').toUpperCase();
+      if (event.currency && event.currency !== expectedCurrency) {
+        await this.finalizeEventRecord(
+          record,
+          'FAILED',
+          `Currency mismatch: expected ${expectedCurrency}, received ${event.currency}`
+        );
+        return {
+          statusCode: 422,
+          body: { error: `Currency integrity violation: expected ${expectedCurrency}, received ${event.currency}` },
+        };
+      }
+
       // 8. Authoritative State Mutation: Insert Payment Record
       const paymentPayload = {
         tenant_id: tenantId,
         user_id: userId,
-        provider: 'PADDLE',
-        provider_payment_id: event.provider_payment_id || `txn_${Date.now()}`,
+        provider: 'RAZORPAY',
+        provider_payment_id: event.provider_payment_id || `pay_${Date.now()}`,
         amount: expectedAmount,
-        currency: plan.currency || 'EUR',
+        currency: expectedCurrency,
         status: 'COMPLETED',
       };
 
@@ -468,11 +743,11 @@ export class PaymentService {
         .single();
 
       if (paymentError) {
-        console.error('Error recording payment in PostgreSQL:', paymentError);
+        console.error('[PaymentWebhook] Error recording payment in PostgreSQL:', paymentError);
       }
 
-      // 9. Authoritative State Mutation: Subscription / Access Pass Activation
-      const durationDays = (plan as any).duration_days || (plan.billing_interval === 'ONE_TIME' ? 30 : 30);
+      // 9. Authoritative State Mutation: 90-Day Access Pass Activation or Extension
+      const durationDays = (plan as any).duration_days || (plan.billing_interval === 'ONE_TIME' ? 90 : 90);
 
       // Check for an existing active subscription
       const { data: activeSub } = await admin
@@ -486,29 +761,29 @@ export class PaymentService {
         .maybeSingle();
 
       let targetSubscriptionId: string;
+      let targetExpiresAt: string;
 
       if (activeSub) {
         // Extend existing access pass: new expiry is MAX(existing_expiry, now) + duration
         const existingExpiryMs = activeSub.expires_at ? new Date(activeSub.expires_at).getTime() : Date.now();
-        const baseMs = existingExpiryMs > Date.now() ? existingExpiryMs : Date.now();
+        const baseMs = Math.max(existingExpiryMs, Date.now());
         const newExpiry = new Date(baseMs + durationDays * 86400 * 1000);
+        targetExpiresAt = newExpiry.toISOString();
 
-        const { data: updatedSub } = await admin
+        await admin
           .from('subscriptions')
           .update({
             plan_id: plan.id,
-            expires_at: newExpiry.toISOString(),
+            expires_at: targetExpiresAt,
             status: 'ACTIVE',
           })
-          .eq('id', activeSub.id)
-          .select()
-          .single();
+          .eq('id', activeSub.id);
 
         targetSubscriptionId = activeSub.id;
-        console.log(`[PaymentWebhook] Extended active subscription ${activeSub.id} until ${newExpiry.toISOString()}`);
+        console.log(`[PaymentWebhook] Extended active subscription ${activeSub.id} until ${targetExpiresAt}`);
       } else {
         // Create new active subscription pass
-        const expiresAt = new Date(Date.now() + durationDays * 86400 * 1000).toISOString();
+        targetExpiresAt = new Date(Date.now() + durationDays * 86400 * 1000).toISOString();
         const { data: newSub, error: subError } = await admin
           .from('subscriptions')
           .insert({
@@ -517,7 +792,7 @@ export class PaymentService {
             plan_id: plan.id,
             status: 'ACTIVE',
             started_at: new Date().toISOString(),
-            expires_at: expiresAt,
+            expires_at: targetExpiresAt,
           })
           .select()
           .single();
@@ -526,7 +801,7 @@ export class PaymentService {
           throw new Error(`Failed to activate subscription in PostgreSQL: ${subError.message}`);
         }
         targetSubscriptionId = newSub.id;
-        console.log(`[PaymentWebhook] Created new active subscription ${newSub.id} expiring at ${expiresAt}`);
+        console.log(`[PaymentWebhook] Created new active 90-day subscription ${newSub.id} expiring at ${targetExpiresAt}`);
       }
 
       // 10. Link subscription ID in payments table
@@ -549,6 +824,7 @@ export class PaymentService {
           provider_payment_id: event.provider_payment_id,
           plan_name: plan.name,
           duration_days: durationDays,
+          expires_at: targetExpiresAt,
         },
       });
 
@@ -562,6 +838,7 @@ export class PaymentService {
           event_id: event.provider_event_id,
           subscription_id: targetSubscriptionId,
           tier: 'PAID',
+          expires_at: targetExpiresAt,
         },
       };
     } catch (err: any) {
@@ -654,8 +931,7 @@ export class PaymentService {
     const { data: subs, error } = await query;
     if (error) throw error;
 
-    // Enrich with user email and plan name
-    const { data: users } = await admin.from('users').select('id, email, full_name');
+    const { data: users } = await admin.from('users').select('id, email, name');
     const { data: plans } = await admin.from('plans').select('id, name, price, currency');
 
     const userMap = new Map((users || []).map((u) => [u.id, u]));
@@ -667,7 +943,7 @@ export class PaymentService {
       return {
         ...sub,
         user_email: user?.email || 'unknown',
-        user_name: user?.full_name || 'unknown',
+        user_name: user?.name || 'unknown',
         plan_name: plan?.name || 'Unknown Plan',
         plan_price: plan?.price,
         plan_currency: plan?.currency,
@@ -691,7 +967,7 @@ export class PaymentService {
     const { data: payments, error } = await query;
     if (error) throw error;
 
-    const { data: users } = await admin.from('users').select('id, email, full_name');
+    const { data: users } = await admin.from('users').select('id, email, name');
     const userMap = new Map((users || []).map((u) => [u.id, u]));
 
     return (payments || []).map((pay) => {
@@ -699,7 +975,7 @@ export class PaymentService {
       return {
         ...pay,
         user_email: user?.email || 'unknown',
-        user_name: user?.full_name || 'unknown',
+        user_name: user?.name || 'unknown',
       };
     });
   }
