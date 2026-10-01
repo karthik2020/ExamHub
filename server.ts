@@ -809,13 +809,59 @@ async function startServer() {
     }
   });
 
+  const DEFAULT_FALLBACK_PLANS = [
+    {
+      id: 'e1000000-0000-0000-0000-000000000001',
+      tenant_id: 'a0000000-0000-0000-0000-000000000001',
+      name: 'Free Guest',
+      description: 'Evaluate core format with fixed 10 questions without registration.',
+      price: 0,
+      currency: 'INR',
+      billing_interval: 'ONE_TIME',
+      features: ['10 fixed questions', 'Single diagnostic session', 'Standard solutions', 'No registration required'],
+      status: 'ACTIVE',
+    },
+    {
+      id: 'e1000000-0000-0000-0000-000000000002',
+      tenant_id: 'a0000000-0000-0000-0000-000000000001',
+      name: 'Registered Member',
+      description: 'Full access to 20-question fixed verified question bank with historical tracking.',
+      price: 0,
+      currency: 'INR',
+      billing_interval: 'ONE_TIME',
+      features: ['20 verified fixed questions', 'Performance analytics', 'Detailed step-by-step solutions', 'Attempt history persistence'],
+      status: 'ACTIVE',
+    },
+    {
+      id: 'e1000000-0000-0000-0000-000000000003',
+      tenant_id: 'a0000000-0000-0000-0000-000000000001',
+      name: 'Pro Unlimited Generator',
+      description: 'Unlimited procedurally generated figure sequence drills with custom difficulty and length.',
+      price: 2499,
+      currency: 'INR',
+      billing_interval: 'ONE_TIME',
+      features: [
+        '90-Day Full Examination Access Pass',
+        'Unlimited Procedural Figure Sequence Generation',
+        'Custom Difficulty Controls (Easy, Medium, Hard)',
+        'Full-Length 90-Minute Timed Simulation Mocks',
+        'Infinite Reproducible Seeds & Step-by-Step Graphical Solutions',
+      ],
+      status: 'ACTIVE',
+    },
+  ];
+
   app.get('/api/plans', async (req, res) => {
     try {
       const tenantId = req.query.tenant_id as string | undefined;
       const plans = await tenantService.getPlans(tenantId, req.headers.authorization);
-      res.json(plans);
+      if (plans && plans.length > 0) {
+        return res.json(plans);
+      }
+      res.json(DEFAULT_FALLBACK_PLANS);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      console.warn('[Server] Error fetching plans from database, returning fallback plans:', err.message);
+      res.json(DEFAULT_FALLBACK_PLANS);
     }
   });
 

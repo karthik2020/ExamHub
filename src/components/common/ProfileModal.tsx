@@ -54,6 +54,13 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  const handleModalClose = () => {
+    if (!isAuthenticated && typeof window !== 'undefined') {
+      sessionStorage.removeItem('pending_checkout_plan_id');
+    }
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -68,24 +75,40 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
         if (!res.success) {
           setErrorMsg(res.error || 'Authentication failed. Please verify your credentials.');
         } else {
-          setSuccessMsg('Successfully signed in! Accessing student portal...');
-          const targetPath = res.studentPath || studentPortalPath || '/ems';
-          setTimeout(() => {
-            onClose();
-            navigate(targetPath);
-          }, 800);
+          const hasPendingCheckout = typeof window !== 'undefined' && Boolean(sessionStorage.getItem('pending_checkout_plan_id'));
+          if (hasPendingCheckout) {
+            setSuccessMsg('Successfully signed in! Resuming checkout...');
+            setTimeout(() => {
+              onClose();
+            }, 600);
+          } else {
+            setSuccessMsg('Successfully signed in! Accessing student portal...');
+            const targetPath = res.studentPath || studentPortalPath || '/ems';
+            setTimeout(() => {
+              onClose();
+              navigate(targetPath);
+            }, 800);
+          }
         }
       } else if (authView === 'signup') {
         const res = await signUpWithPassword(email, password, name || email.split('@')[0]);
         if (!res.success) {
           setErrorMsg(res.error || 'Registration failed. Please try again.');
         } else {
-          setSuccessMsg(res.message || 'Registration completed successfully!');
-          const targetPath = res.studentPath || studentPortalPath || '/ems';
-          setTimeout(() => {
-            onClose();
-            navigate(targetPath);
-          }, 1200);
+          const hasPendingCheckout = typeof window !== 'undefined' && Boolean(sessionStorage.getItem('pending_checkout_plan_id'));
+          if (hasPendingCheckout) {
+            setSuccessMsg(res.message ? `${res.message} Resuming checkout...` : 'Registration complete! Resuming checkout...');
+            setTimeout(() => {
+              onClose();
+            }, 600);
+          } else {
+            setSuccessMsg(res.message || 'Registration completed successfully!');
+            const targetPath = res.studentPath || studentPortalPath || '/ems';
+            setTimeout(() => {
+              onClose();
+              navigate(targetPath);
+            }, 1200);
+          }
         }
       } else if (authView === 'forgot') {
         const res = await resetPassword(email);
@@ -195,7 +218,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleModalClose}
             className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -479,6 +502,23 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
         {/* TAB 2: EXPLICIT DEMO / TESTING PROFILES */}
         {activeTab === 'demo' && (
           <div className="py-2">
+            {typeof window !== 'undefined' && sessionStorage.getItem('pending_checkout_plan_id') && (
+              <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 mb-3 flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
+                <div className="text-xs text-rose-900">
+                  <span className="font-bold">Real Purchase Notice:</span> A real paid checkout session is pending. Demo profiles cannot process real transactions or call payment APIs. Please switch to{' '}
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('auth')}
+                    className="font-bold text-teal-800 underline cursor-pointer"
+                  >
+                    Production Auth
+                  </button>{' '}
+                  to complete checkout with Razorpay.
+                </div>
+              </div>
+            )}
+
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 flex items-start gap-2.5">
               <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
               <div className="text-xs text-amber-900">
@@ -500,6 +540,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                   <div
                     key={idx}
                     onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        sessionStorage.removeItem('pending_checkout_plan_id');
+                      }
                       switchDemoProfile(p.tier, p.role);
                       onClose();
                     }}

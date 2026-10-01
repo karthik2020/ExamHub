@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Check, X, ArrowRight, ShieldCheck, Sparkles, CreditCard, Loader2 } from 'lucide-react';
 import { SEOHead } from '../../components/common/SEOHead';
@@ -7,21 +7,48 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Plan } from '../../types';
 import { apiFetch } from '../../services/apiClient';
 
+const PENDING_PLAN_KEY = 'pending_checkout_plan_id';
+
+const DEFAULT_COMMERCIAL_PLAN: Plan = {
+  id: 'e1000000-0000-0000-0000-000000000003',
+  tenant_id: 'a0000000-0000-0000-0000-000000000001',
+  name: 'Pro Unlimited Pass',
+  description: '90 days of endless procedural Figure Sequence variations, difficulty controls, and full-length timed mocks.',
+  price: 2499,
+  currency: 'INR',
+  billing_interval: 'ONE_TIME',
+  status: 'ACTIVE',
+  features: [
+    'Unlimited procedural Figure Sequence drills',
+    'Custom difficulty controls: Easy, Medium, Hard',
+    'Full 90-minute timed mock test simulation',
+    'Infinite reproducible seeds & review replay',
+    'Authoritative 90-day access window',
+  ],
+};
+
 export const PricingPage: React.FC = () => {
   const { studentPortalPath } = useTenant();
-  const { setLoginModalOpen, isAuthenticated, entitlement, user } = useAuth();
+  const { setLoginModalOpen, isAuthenticated, entitlement, user, authMode, loginModalOpen } = useAuth();
   const navigate = useNavigate();
 
-  const [commercialPlan, setCommercialPlan] = useState<Plan | null>(null);
-  const [loadingPlan, setLoadingPlan] = useState(true);
+  const [commercialPlan, setCommercialPlan] = useState<Plan>(DEFAULT_COMMERCIAL_PLAN);
+  const [loadingPlan, setLoadingPlan] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
+  const [pendingPlanId, setPendingPlanId] = useState<string | null>(() => {
+    return typeof window !== 'undefined' ? sessionStorage.getItem(PENDING_PLAN_KEY) : null;
+  });
+
+  const isCheckoutInFlight = useRef(false);
+
   useEffect(() => {
+    let isMounted = true;
     async function loadPlans() {
       try {
         const res = await fetch('/api/plans');
-        if (res.ok) {
+        if (res.ok && isMounted) {
           const plans: Plan[] = await res.json();
           // Find the active commercial upgrade plan
           const pro = plans.find((p) => p.price > 0 && p.status === 'ACTIVE') || plans[plans.length - 1];
@@ -30,12 +57,18 @@ export const PricingPage: React.FC = () => {
           }
         }
       } catch (err) {
-        console.error('Failed to load plans:', err);
+        // Fall back gracefully to authoritative default commercial plan without breaking the page
+        console.warn('Using default commercial plan configuration:', err);
       } finally {
-        setLoadingPlan(false);
+        if (isMounted) {
+          setLoadingPlan(false);
+        }
       }
     }
     loadPlans();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const formatPrice = (price: number, currency: string) => {
@@ -83,25 +116,47 @@ export const PricingPage: React.FC = () => {
     });
   };
 
-  const handleCheckout = async () => {
+  const executeCheckout = async (targetPlanId: string) => {
+    if (isCheckoutInFlight.current) return;
+
     if (!isAuthenticated) {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(PENDING_PLAN_KEY, targetPlanId);
+      }
+      setPendingPlanId(targetPlanId);
+
+      if (authMode === 'DEMO_MODE') {
+        setCheckoutError(
+          'Developer Demo Mode is active. Demo profiles cannot process real transactions. Please sign in with Production Auth (Supabase) to complete checkout.'
+        );
+      }
       setLoginModalOpen(true);
       return;
     }
 
     if (entitlement.level === 'PREMIUM') {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(PENDING_PLAN_KEY);
+      }
+      setPendingPlanId(null);
       navigate(`${studentPortalPath || '/ems'}/mock-tests`);
       return;
     }
 
+    // Authenticated via Supabase: clear pending plan safely before initiating to avoid duplicate runs
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem(PENDING_PLAN_KEY);
+    }
+    setPendingPlanId(null);
+
+    isCheckoutInFlight.current = true;
     setCheckoutLoading(true);
     setCheckoutError(null);
 
     try {
-      const planId = commercialPlan?.id || 'e1000000-0000-0000-0000-000000000003';
       const session = await apiFetch<any>('/api/checkout/create-session', {
         method: 'POST',
-        body: JSON.stringify({ plan_id: planId }),
+        body: JSON.stringify({ plan_id: targetPlanId }),
       });
 
       const scriptLoaded = await loadRazorpayScript();
@@ -139,7 +194,14 @@ export const PricingPage: React.FC = () => {
             setCheckoutError(e.message || 'Payment verification failed on the server. Please contact support.');
           } finally {
             setCheckoutLoading(false);
+            isCheckoutInFlight.current = false;
           }
+        },
+        modal: {
+          ondismiss: function () {
+            setCheckoutLoading(false);
+            isCheckoutInFlight.current = false;
+          },
         },
         prefill: {
           name: user?.name,
@@ -153,15 +215,43 @@ export const PricingPage: React.FC = () => {
       const rzp = new (window as any).Razorpay(options);
       rzp.on('payment.failed', function (resp: any) {
         setCheckoutError(`Payment failed: ${resp.error?.description || 'Transaction was declined.'}`);
+        setCheckoutLoading(false);
+        isCheckoutInFlight.current = false;
       });
       rzp.open();
     } catch (err: any) {
       console.error('Checkout error:', err);
       setCheckoutError(err.message || 'Payment initiation failed. Please try again.');
-    } finally {
       setCheckoutLoading(false);
+      isCheckoutInFlight.current = false;
     }
   };
+
+  const handleCheckout = () => {
+    const planId = commercialPlan?.id || 'e1000000-0000-0000-0000-000000000003';
+    executeCheckout(planId);
+  };
+
+  // Automatically resume pending checkout once authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      const storedPlanId = typeof window !== 'undefined' ? sessionStorage.getItem(PENDING_PLAN_KEY) : null;
+      const planToResume = storedPlanId || pendingPlanId;
+      if (planToResume && !checkoutLoading && !isCheckoutInFlight.current) {
+        executeCheckout(planToResume);
+      }
+    }
+  }, [isAuthenticated]);
+
+  // Clean up pending plan ID if modal is closed without authenticating
+  useEffect(() => {
+    if (!loginModalOpen && !isAuthenticated) {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(PENDING_PLAN_KEY);
+      }
+      setPendingPlanId(null);
+    }
+  }, [loginModalOpen, isAuthenticated]);
 
   return (
     <div className="space-y-20 py-10 sm:py-16">
@@ -189,8 +279,20 @@ export const PricingPage: React.FC = () => {
           </p>
 
           {checkoutError && (
-            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium max-w-md mx-auto">
-              {checkoutError}
+            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium max-w-md mx-auto space-y-2 text-left">
+              <p>{checkoutError}</p>
+              {authMode === 'DEMO_MODE' && !isAuthenticated && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setLoginModalOpen(true)}
+                    className="px-3 py-1.5 rounded-lg bg-teal-800 text-white font-bold text-xs hover:bg-teal-900 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <span>Sign In with Production Auth</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
