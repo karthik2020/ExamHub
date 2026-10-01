@@ -47,11 +47,19 @@ export const PricingPage: React.FC = () => {
     let isMounted = true;
     async function loadPlans() {
       try {
-        const res = await fetch('/api/plans');
+        const res = await fetch('/api/plans?tenant_id=a0000000-0000-0000-0000-000000000001');
         if (res.ok && isMounted) {
           const plans: Plan[] = await res.json();
-          // Find the active commercial upgrade plan
-          const pro = plans.find((p) => p.price > 0 && p.status === 'ACTIVE') || plans[plans.length - 1];
+          // Find the active commercial upgrade plan specifically for dMATHub
+          const pro =
+            plans.find((p) => p.id === 'e1000000-0000-0000-0000-000000000003') ||
+            plans.find(
+              (p) =>
+                p.tenant_id === 'a0000000-0000-0000-0000-000000000001' &&
+                p.price === 2499 &&
+                p.status === 'ACTIVE'
+            ) ||
+            DEFAULT_COMMERCIAL_PLAN;
           if (pro) {
             setCommercialPlan(pro);
           }
@@ -149,6 +157,8 @@ export const PricingPage: React.FC = () => {
     }
     setPendingPlanId(null);
 
+    const resolvedPlanId = targetPlanId || commercialPlan?.id || 'e1000000-0000-0000-0000-000000000003';
+
     isCheckoutInFlight.current = true;
     setCheckoutLoading(true);
     setCheckoutError(null);
@@ -156,7 +166,7 @@ export const PricingPage: React.FC = () => {
     try {
       const session = await apiFetch<any>('/api/checkout/create-session', {
         method: 'POST',
-        body: JSON.stringify({ plan_id: targetPlanId }),
+        body: JSON.stringify({ plan_id: resolvedPlanId }),
       });
 
       const scriptLoaded = await loadRazorpayScript();
@@ -219,6 +229,8 @@ export const PricingPage: React.FC = () => {
         isCheckoutInFlight.current = false;
       });
       rzp.open();
+      setCheckoutLoading(false);
+      isCheckoutInFlight.current = false;
     } catch (err: any) {
       console.error('Checkout error:', err);
       setCheckoutError(err.message || 'Payment initiation failed. Please try again.');
@@ -228,7 +240,7 @@ export const PricingPage: React.FC = () => {
   };
 
   const handleCheckout = () => {
-    const planId = commercialPlan?.id || 'e1000000-0000-0000-0000-000000000003';
+    const planId = 'e1000000-0000-0000-0000-000000000003';
     executeCheckout(planId);
   };
 
@@ -242,16 +254,6 @@ export const PricingPage: React.FC = () => {
       }
     }
   }, [isAuthenticated]);
-
-  // Clean up pending plan ID if modal is closed without authenticating
-  useEffect(() => {
-    if (!loginModalOpen && !isAuthenticated) {
-      if (typeof window !== 'undefined') {
-        sessionStorage.removeItem(PENDING_PLAN_KEY);
-      }
-      setPendingPlanId(null);
-    }
-  }, [loginModalOpen, isAuthenticated]);
 
   return (
     <div className="space-y-20 py-10 sm:py-16">
@@ -465,7 +467,7 @@ export const PricingPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-8 mt-6 border-t border-teal-800">
+            <div className="pt-8 mt-6 border-t border-teal-800 space-y-3">
               <button
                 type="button"
                 disabled={checkoutLoading}
@@ -483,6 +485,21 @@ export const PricingPage: React.FC = () => {
                   'Get 90-Day Access — ₹2,499'
                 )}
               </button>
+
+              {checkoutError && (
+                <div className="p-3 rounded-xl bg-rose-900/80 border border-rose-400/50 text-rose-100 text-xs font-medium space-y-1.5 text-left">
+                  <p>{checkoutError}</p>
+                  {authMode === 'DEMO_MODE' && !isAuthenticated && (
+                    <button
+                      type="button"
+                      onClick={() => setLoginModalOpen(true)}
+                      className="text-teal-200 underline font-bold hover:text-white cursor-pointer block"
+                    >
+                      Sign In with Production Auth →
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

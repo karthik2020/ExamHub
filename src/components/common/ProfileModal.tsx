@@ -65,6 +65,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const hasPendingCheckout = typeof window !== 'undefined' && Boolean(sessionStorage.getItem('pending_checkout_plan_id'));
     setErrorMsg(null);
     setSuccessMsg(null);
     setLoading(true);
@@ -75,12 +76,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
         if (!res.success) {
           setErrorMsg(res.error || 'Authentication failed. Please verify your credentials.');
         } else {
-          const hasPendingCheckout = typeof window !== 'undefined' && Boolean(sessionStorage.getItem('pending_checkout_plan_id'));
           if (hasPendingCheckout) {
             setSuccessMsg('Successfully signed in! Resuming checkout...');
             setTimeout(() => {
               onClose();
-            }, 600);
+            }, 300);
           } else {
             setSuccessMsg('Successfully signed in! Accessing student portal...');
             const targetPath = res.studentPath || studentPortalPath || '/ems';
@@ -95,12 +95,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
         if (!res.success) {
           setErrorMsg(res.error || 'Registration failed. Please try again.');
         } else {
-          const hasPendingCheckout = typeof window !== 'undefined' && Boolean(sessionStorage.getItem('pending_checkout_plan_id'));
           if (hasPendingCheckout) {
             setSuccessMsg(res.message ? `${res.message} Resuming checkout...` : 'Registration complete! Resuming checkout...');
             setTimeout(() => {
               onClose();
-            }, 600);
+            }, 300);
           } else {
             setSuccessMsg(res.message || 'Registration completed successfully!');
             const targetPath = res.studentPath || studentPortalPath || '/ems';
