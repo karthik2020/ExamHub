@@ -47,9 +47,8 @@ export const PricingPage: React.FC = () => {
     let isMounted = true;
     async function loadPlans() {
       try {
-        const res = await fetch('/api/plans?tenant_id=a0000000-0000-0000-0000-000000000001');
-        if (res.ok && isMounted) {
-          const plans: Plan[] = await res.json();
+        const plans = await apiFetch<Plan[]>('/api/plans?tenant_id=a0000000-0000-0000-0000-000000000001');
+        if (isMounted && plans) {
           // Find the active commercial upgrade plan specifically for dMATHub
           const pro =
             plans.find((p) => p.id === 'e1000000-0000-0000-0000-000000000003') ||

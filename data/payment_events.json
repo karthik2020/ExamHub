@@ -1050,5 +1050,19 @@
     "status": "PROCESSED",
     "created_at": "2026-10-01T18:54:15.297Z",
     "processed_at": "2026-10-01T18:54:15.973Z"
+  },
+  {
+    "id": "b2e5fb43-c1ce-4b10-bee6-5a3ddd49c796",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "provider": "RAZORPAY",
+    "provider_event_id": "pay_test_1790883593455",
+    "event_type": "payment.verified",
+    "payload": {
+      "razorpay_order_id": "order_1790883593452_0967e9cd",
+      "razorpay_payment_id": "pay_test_1790883593455"
+    },
+    "status": "PROCESSED",
+    "created_at": "2026-10-01T19:39:59.046Z",
+    "processed_at": "2026-10-01T19:39:59.718Z"
   }
 ]

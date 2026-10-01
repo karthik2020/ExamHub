@@ -28,6 +28,50 @@ const PORT = Number(process.env.PORT) || 3000;
 async function startServer() {
   const app = express();
 
+  // ==========================================
+  // CORS MIDDLEWARE (Cloud Run API + Frontend)
+  // ==========================================
+  const ALLOWED_ORIGINS = [
+    'https://examhub-engine.ai.studio',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5173',
+  ];
+
+  function isOriginAllowed(origin: string): boolean {
+    if (!origin) return false;
+    const normalized = origin.trim().replace(/\/$/, '');
+    if (ALLOWED_ORIGINS.includes(normalized)) return true;
+    if (/^https:\/\/[a-z0-9-]+\.ai\.studio$/i.test(normalized)) return true;
+    if (/^https:\/\/ais-(?:dev|pre)-[a-z0-9-]+\.[a-z0-9-]+\.run\.app$/i.test(normalized)) return true;
+    return false;
+  }
+
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+
+    if (origin && isOriginAllowed(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader(
+        'Access-Control-Allow-Methods',
+        'GET, POST, PUT, PATCH, DELETE, OPTIONS'
+      );
+      res.setHeader(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Authorization, x-tenant-id, x-tenant-slug, x-demo-role, apikey'
+      );
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
+
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+
+    next();
+  });
+
   // Webhook raw body parser mounted before express.json() to support HMAC-SHA256 verification
   app.use('/api/webhooks', express.raw({ type: 'application/json' }));
   app.use(express.json());
